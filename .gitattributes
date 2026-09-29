@@ -1,0 +1,16 @@
+# Line endings are normalised to LF everywhere, including in the working tree on
+# Windows. Migration files are checksummed, so a checkout that changed their line
+# endings would be a needless source of confusion even though the migrator
+# normalises before hashing.
+* text=auto eol=lf
+
+# Binary, never touched.
+*.png binary
+*.jpg binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+
+# Generated; excluded from diffs and language statistics.
+pnpm-lock.yaml linguist-generated=true -diff

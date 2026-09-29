@@ -1,0 +1,15 @@
+packages:
+  - 'packages/*'
+  - 'apps/*'
+
+# Install scripts are blocked unless listed here, so a compromised transitive
+# dependency cannot execute code during install. Each entry is a deliberate
+# decision, not a default.
+allowBuilds:
+  # esbuild's install script only downloads a binary that pnpm already
+  # installed as the platform-specific @esbuild/* package.
+  esbuild: false
+  '@swc/core': true
+  '@tailwindcss/oxide': true
+  sharp: true
+  unrs-resolver: true

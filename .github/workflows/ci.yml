@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, typecheck, test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nfc_erp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: nfc_erp_dev
+      PGDATABASE_TEST: nfc_erp_test
+      APP_DB_USER: nfc_app
+      # Throwaway credential for a throwaway database inside the job.
+      APP_DB_PASSWORD: nfc_app_ci
+      DEV_ACTOR_ENABLED: 'true'
+      DEV_ACTOR_DEFAULT: md
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:4000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build workspace packages
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # Proves the acceptance line "migrations and seed run from scratch": the
+      # service container starts empty every time.
+      - name: Bootstrap, migrate and seed
+        run: pnpm db:bootstrap && pnpm db:migrate && pnpm db:seed
+
+      - name: Unit and integration tests
+        run: pnpm test
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @nfc/web exec playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: pnpm test:e2e
+
+      - name: Upload the Playwright report when the end-to-end tests fail
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7

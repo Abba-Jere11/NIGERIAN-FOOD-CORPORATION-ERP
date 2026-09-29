@@ -1,0 +1,133 @@
+@import 'tailwindcss';
+
+/*
+ * NFC Mini ERP design tokens (A8).
+ *
+ * Priorities: clarity, hierarchy, speed, traceability, trust. A restrained
+ * palette - deep green accent, neutral greys, one warning colour and one danger
+ * colour. No gradients, no decorative colour.
+ */
+@theme {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', Menlo, Consolas, monospace;
+
+  --color-canvas: #f4f5f6;
+  --color-surface: #ffffff;
+  --color-surface-muted: #fafafa;
+
+  --color-ink-900: #14181c;
+  --color-ink-700: #333a42;
+  --color-ink-500: #5b646e;
+  --color-ink-400: #7c8590;
+  --color-ink-300: #b9bfc6;
+  --color-ink-200: #dcdfe3;
+  --color-ink-100: #eceef0;
+
+  --color-accent-900: #06301f;
+  --color-accent-800: #08402a;
+  --color-accent-700: #0b4f3a;
+  --color-accent-600: #12664a;
+  --color-accent-100: #e3efe9;
+  --color-accent-50: #f1f7f4;
+
+  --color-warning-700: #8a5100;
+  --color-warning-600: #b45309;
+  --color-warning-100: #fdf1e0;
+
+  --color-danger-700: #91231b;
+  --color-danger-600: #b42318;
+  --color-danger-100: #fbe6e4;
+
+  --color-info-700: #1f4e79;
+  --color-info-100: #e6eef5;
+
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink-900);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* Numbers in tables must align on the digit, not the glyph width. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Visible focus is a requirement, not a preference: these forms are used by keyboard. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent-600);
+    outline-offset: 1px;
+  }
+
+  th {
+    font-weight: 600;
+  }
+}
+
+/*
+ * Print stylesheet. Official documents - memos, payment records, procurement
+ * packages - must print cleanly on A4 without the application furniture.
+ */
+@media print {
+  @page {
+    size: A4;
+    margin: 16mm 14mm;
+  }
+
+  body {
+    background: #ffffff;
+    font-size: 11pt;
+  }
+
+  .no-print,
+  nav,
+  aside,
+  header.app-top-bar {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-surface {
+    box-shadow: none !important;
+    border: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  a[href]::after {
+    content: '';
+  }
+
+  table {
+    border-collapse: collapse;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tr,
+  .avoid-break {
+    break-inside: avoid;
+  }
+}
+
+.print-only {
+  display: none;
+}

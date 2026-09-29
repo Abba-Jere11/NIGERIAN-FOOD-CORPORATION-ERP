@@ -1,0 +1,43 @@
+{
+  "name": "nfc-mini-erp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Nigeria Food Corporation Mini ERP - holding company and four subsidiaries",
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "pnpm -r test",
+    "test:unit": "pnpm -r test:unit",
+    "test:integration": "pnpm --filter @nfc/db test:integration",
+    "test:e2e": "pnpm --filter @nfc/web test:e2e",
+    "verify": "pnpm lint && pnpm build && pnpm typecheck && pnpm test",
+    "db:bootstrap": "pnpm --filter @nfc/db bootstrap",
+    "db:migrate": "pnpm --filter @nfc/db migrate",
+    "db:seed": "pnpm --filter @nfc/db seed",
+    "db:reset": "pnpm --filter @nfc/db reset",
+    "dev": "pnpm --parallel --filter @nfc/api --filter @nfc/web dev",
+    "dev:api": "pnpm --filter @nfc/api dev",
+    "dev:web": "pnpm --filter @nfc/web dev"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.37.0",
+    "@next/eslint-plugin-next": "^15.5.26",
+    "@types/node": "^22.18.8",
+    "eslint": "^9.37.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.0",
+    "vitest": "^3.2.4"
+  }
+}

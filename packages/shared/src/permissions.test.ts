@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { AUDIT_VIEWER_ROLES, ROLE_KEYS, ROLES } from './org';
-import { PERMISSION_KEYS, ROLE_PERMISSIONS, permissionsForRole, roleHasPermission } from './permissions';
+import {
+  PERMISSION_KEYS,
+  ROLE_PERMISSIONS,
+  permissionsForRole,
+  roleHasPermission,
+} from './permissions';
 
 /**
  * A5: the system has exactly five roles, and no others exist in any module.
@@ -67,7 +72,10 @@ describe('the permission map', () => {
   });
 
   it('restricts entity and department administration to the MD', () => {
-    for (const permission of ['organization.entity.manage', 'organization.department.manage'] as const) {
+    for (const permission of [
+      'organization.entity.manage',
+      'organization.department.manage',
+    ] as const) {
       const holders = ROLE_KEYS.filter((role) => roleHasPermission(role, permission));
       expect(holders).toEqual(['md']);
     }

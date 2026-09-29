@@ -102,9 +102,10 @@ describe('an audit entry records everything M1 requires', () => {
       actor_system_name: string | null;
       actor_ref: string;
       actor_role: string | null;
-    }>('SELECT actor_user_id, actor_system_name, actor_ref, actor_role FROM audit_log WHERE id = $1', [
-      written.id,
-    ]);
+    }>(
+      'SELECT actor_user_id, actor_system_name, actor_ref, actor_role FROM audit_log WHERE id = $1',
+      [written.id],
+    );
 
     expect(stored.rows[0]).toEqual({
       actor_user_id: null,
@@ -116,9 +117,7 @@ describe('an audit entry records everything M1 requires', () => {
 
   it('refuses an entry with no actor at all', async () => {
     const error = await captureError(() =>
-      owner.query(
-        `INSERT INTO audit_log (action, subject_type) VALUES ('create', 'test_fixture')`,
-      ),
+      owner.query(`INSERT INTO audit_log (action, subject_type) VALUES ('create', 'test_fixture')`),
     );
     expect(error.message).toContain('audit_log_actor_exactly_one');
   });
@@ -189,9 +188,9 @@ describe('a reason is mandatory for reject, return and archive (R11)', () => {
   it.each(['reject', 'return', 'archive'] as const)(
     'is refused in code before reaching the database for the %s action',
     (action) => {
-      expect(() =>
-        assertAuditEntryValid({ action, subjectType: 'test_fixture' }),
-      ).toThrow(AuditValidationError);
+      expect(() => assertAuditEntryValid({ action, subjectType: 'test_fixture' })).toThrow(
+        AuditValidationError,
+      );
       expect(() =>
         assertAuditEntryValid({ action, subjectType: 'test_fixture', reason: '   ' }),
       ).toThrow(/R11/);

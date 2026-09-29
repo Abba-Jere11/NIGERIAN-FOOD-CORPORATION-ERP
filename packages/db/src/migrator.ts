@@ -106,7 +106,9 @@ export async function runMigrations(
       }
     }
   } finally {
-    await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_KEY]).catch(() => undefined);
+    await client
+      .query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_KEY])
+      .catch(() => undefined);
     client.release();
   }
 

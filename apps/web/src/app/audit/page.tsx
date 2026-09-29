@@ -1,10 +1,4 @@
-import type {
-  AuditEntryView,
-  AuditFiltersView,
-  EntityView,
-  MeView,
-  Page,
-} from '@nfc/shared';
+import type { AuditEntryView, AuditFiltersView, EntityView, MeView, Page } from '@nfc/shared';
 import { Pagination } from '@/components/ui/Pagination';
 import { PageHeader, Surface, SurfaceHeader } from '@/components/ui/Surface';
 import { ErrorState, Notice } from '@/components/ui/States';

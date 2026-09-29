@@ -78,7 +78,9 @@ export function DataTable<T>({
     if (needle === '') return rows;
     return rows.filter((row) =>
       columns.some((column) =>
-        cellText(column as DataTableColumn<unknown>, row).toLowerCase().includes(needle),
+        cellText(column as DataTableColumn<unknown>, row)
+          .toLowerCase()
+          .includes(needle),
       ),
     );
   }, [rows, columns, filter]);
@@ -198,7 +200,11 @@ export function DataTable<T>({
                       >
                         {column.header}
                         <span aria-hidden="true" className="text-[9px]">
-                          {sortKey === column.key ? (sortDirection === 'asc' ? '\u25B2' : '\u25BC') : '\u21C5'}
+                          {sortKey === column.key
+                            ? sortDirection === 'asc'
+                              ? '\u25B2'
+                              : '\u25BC'
+                            : '\u21C5'}
                         </span>
                       </button>
                     ) : (
@@ -210,9 +216,14 @@ export function DataTable<T>({
             </thead>
             <tbody>
               {visible.map((row) => (
-                <tr key={rowKey(row)} className="border-b border-ink-100 last:border-0 hover:bg-surface-muted">
+                <tr
+                  key={rowKey(row)}
+                  className="border-b border-ink-100 last:border-0 hover:bg-surface-muted"
+                >
                   {columns.map((column, columnIndex) => {
-                    const content = column.render ? column.render(row) : cellText(column as DataTableColumn<unknown>, row);
+                    const content = column.render
+                      ? column.render(row)
+                      : cellText(column as DataTableColumn<unknown>, row);
                     const href = rowHref?.(row);
                     return (
                       <td

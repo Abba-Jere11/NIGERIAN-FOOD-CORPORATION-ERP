@@ -13,11 +13,7 @@ export function Surface({
 }) {
   return (
     <section
-      className={cx(
-        'print-surface border border-ink-200 bg-surface',
-        padded && 'p-4',
-        className,
-      )}
+      className={cx('print-surface border border-ink-200 bg-surface', padded && 'p-4', className)}
     >
       {children}
     </section>
@@ -64,7 +60,9 @@ export function PageHeader({
           </p>
         ) : null}
         <h1 className="text-xl font-semibold text-ink-900">{title}</h1>
-        {description ? <p className="mt-1 max-w-3xl text-[13px] text-ink-500">{description}</p> : null}
+        {description ? (
+          <p className="mt-1 max-w-3xl text-[13px] text-ink-500">{description}</p>
+        ) : null}
       </div>
       {actions ? <div className="no-print flex items-center gap-2">{actions}</div> : null}
     </div>

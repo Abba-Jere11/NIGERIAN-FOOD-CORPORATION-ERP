@@ -34,7 +34,11 @@ const MARKS: Record<TrackerStageState, { glyph: string; className: string; srLab
     className: 'text-warning-700 border-warning-600',
     srLabel: 'returned for correction',
   },
-  rejected: { glyph: '\u00D7', className: 'text-danger-700 border-danger-600', srLabel: 'rejected' },
+  rejected: {
+    glyph: '\u00D7',
+    className: 'text-danger-700 border-danger-600',
+    srLabel: 'rejected',
+  },
 };
 
 export function ApprovalTracker({ stages }: { stages: TrackerStage[] }) {

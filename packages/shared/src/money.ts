@@ -188,7 +188,9 @@ export function integerToWords(value: bigint): string {
     const group = groups[i] as number;
     if (group === 0) continue;
     const scale = SCALES[i] as string;
-    parts.push(scale === '' ? belowThousandToWords(group) : `${belowThousandToWords(group)} ${scale}`);
+    parts.push(
+      scale === '' ? belowThousandToWords(group) : `${belowThousandToWords(group)} ${scale}`,
+    );
   }
   return parts.join(', ');
 }

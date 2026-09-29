@@ -138,22 +138,16 @@ describe('business tables refuse deletion (R3)', () => {
     await owner.end();
   });
 
-  it.each(['organizations', 'entities', 'departments'])(
-    'refuses DELETE on %s',
-    async (table) => {
-      const error = await captureError(() => owner.query(`DELETE FROM ${table} WHERE false`));
-      expect(error.message).toContain('never deleted');
-      expect(error.hint).toContain('R3');
-    },
-  );
+  it.each(['organizations', 'entities', 'departments'])('refuses DELETE on %s', async (table) => {
+    const error = await captureError(() => owner.query(`DELETE FROM ${table} WHERE false`));
+    expect(error.message).toContain('never deleted');
+    expect(error.hint).toContain('R3');
+  });
 
-  it.each(['organizations', 'entities', 'departments'])(
-    'refuses TRUNCATE on %s',
-    async (table) => {
-      const error = await captureError(() => owner.query(`TRUNCATE ${table} CASCADE`));
-      expect(error.message).toContain('never deleted');
-    },
-  );
+  it.each(['organizations', 'entities', 'departments'])('refuses TRUNCATE on %s', async (table) => {
+    const error = await captureError(() => owner.query(`TRUNCATE ${table} CASCADE`));
+    expect(error.message).toContain('never deleted');
+  });
 
   it.each(['organizations', 'entities', 'departments'])(
     'withholds DELETE privilege on %s from the application role',
@@ -178,10 +172,10 @@ describe('business tables refuse deletion (R3)', () => {
     );
 
     await inCommittedTransaction(owner, systemActor(), async (client) => {
-      await client.query(
-        `UPDATE entities SET status = 'INACTIVE', updated_by = $2 WHERE id = $1`,
-        [entityId, 'system:seed'],
-      );
+      await client.query(`UPDATE entities SET status = 'INACTIVE', updated_by = $2 WHERE id = $1`, [
+        entityId,
+        'system:seed',
+      ]);
       await insertAuditEntry(client, systemActor(), {
         action: 'edit',
         subjectType: 'entity',

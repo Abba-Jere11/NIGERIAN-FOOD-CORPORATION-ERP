@@ -1,11 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import type { ActorContext } from '@nfc/db';
-import {
-  type DevActorSummaryView,
-  type MeView,
-  permissionsForRole,
-  ROLES,
-} from '@nfc/shared';
+import { type DevActorSummaryView, type MeView, permissionsForRole, ROLES } from '@nfc/shared';
 import { ActorService } from './actor.service';
 import { CurrentActor } from './current-actor.decorator';
 import { EntityDirectory } from './entity-directory.service';

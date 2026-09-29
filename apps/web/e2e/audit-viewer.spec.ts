@@ -91,9 +91,9 @@ test.describe('the audit log is restricted to the MD and ED Finance (M1 item 7)'
       await actAs(page, actor);
 
       // The module is not offered...
-      await expect(page.getByRole('navigation', { name: 'Modules' }).getByText('Audit log')).toHaveCount(
-        0,
-      );
+      await expect(
+        page.getByRole('navigation', { name: 'Modules' }).getByText('Audit log'),
+      ).toHaveCount(0);
 
       // ...and typing the address is refused rather than merely hidden.
       await page.goto('/audit');

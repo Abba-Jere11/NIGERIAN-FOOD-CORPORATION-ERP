@@ -123,7 +123,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     logger.error(
-      { err: exception instanceof Error ? { message: exception.message, stack: exception.stack } : exception },
+      {
+        err:
+          exception instanceof Error
+            ? { message: exception.message, stack: exception.stack }
+            : exception,
+      },
       'unhandled error',
     );
     this.send(response, 500, {

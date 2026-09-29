@@ -34,7 +34,10 @@ export function Timeline({ entries }: { entries: TimelineEntry[] }) {
             </time>
             <span className="text-[13px] text-ink-900">
               {entry.href ? (
-                <Link href={entry.href} className="underline decoration-ink-300 hover:decoration-ink-700">
+                <Link
+                  href={entry.href}
+                  className="underline decoration-ink-300 hover:decoration-ink-700"
+                >
                   {entry.text}
                 </Link>
               ) : (
@@ -43,7 +46,9 @@ export function Timeline({ entries }: { entries: TimelineEntry[] }) {
             </span>
           </div>
           <p className="text-[12px] text-ink-500">{entry.actor}</p>
-          {entry.detail ? <div className="mt-1 text-[12px] text-ink-700">{entry.detail}</div> : null}
+          {entry.detail ? (
+            <div className="mt-1 text-[12px] text-ink-700">{entry.detail}</div>
+          ) : null}
         </li>
       ))}
     </ol>

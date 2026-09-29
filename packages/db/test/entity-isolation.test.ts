@@ -82,7 +82,9 @@ describe('Row-Level Security isolates one subsidiary from another (R5)', () => {
   it('shows a subsidiary-scoped actor only their own entity', async () => {
     const actor = entityScopedActor(yfz);
     const codes = await inRolledBackTransaction(app, actor, async (client) => {
-      const result = await client.query<{ code: string }>('SELECT code FROM entities ORDER BY code');
+      const result = await client.query<{ code: string }>(
+        'SELECT code FROM entities ORDER BY code',
+      );
       return result.rows.map((row) => row.code);
     });
 

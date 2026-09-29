@@ -31,8 +31,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     });
   } catch (error) {
     const status = error instanceof ApiError ? error.status : 500;
-    const message =
-      error instanceof ApiError ? error.message : 'The export could not be produced.';
+    const message = error instanceof ApiError ? error.message : 'The export could not be produced.';
     return NextResponse.json({ error: { code: 'EXPORT_FAILED', message } }, { status });
   }
 }

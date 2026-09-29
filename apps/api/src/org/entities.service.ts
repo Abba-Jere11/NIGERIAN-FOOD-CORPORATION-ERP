@@ -71,7 +71,8 @@ export class EntitiesService {
     return this.unitOfWork.read(actor, async (tx) => {
       const result = await tx.client.query<EntityRowRaw>(`${this.selectSql} WHERE e.id = $1`, [id]);
       const row = result.rows[0];
-      if (!row) throw new NotFoundError('That subsidiary was not found, or is outside your access.');
+      if (!row)
+        throw new NotFoundError('That subsidiary was not found, or is outside your access.');
       return toView(row);
     });
   }

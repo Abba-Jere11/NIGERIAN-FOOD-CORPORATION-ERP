@@ -2,11 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { ActorContext } from '@nfc/db';
 import { computeDiff, type DepartmentView, type RecordStatus } from '@nfc/shared';
 import { assertCan } from '../auth/can';
-import {
-  ConflictError,
-  NotFoundError,
-  StaleRecordError,
-} from '../common/errors/domain-error';
+import { ConflictError, NotFoundError, StaleRecordError } from '../common/errors/domain-error';
 import { UnitOfWork, type TxScope } from '../database/unit-of-work';
 import type {
   CreateDepartmentInput,
@@ -139,7 +135,14 @@ export class DepartmentsService {
         `UPDATE departments
             SET name = $1, code = $2, description = $3, updated_by = $4
           WHERE id = $5 AND row_version = $6`,
-        [input.name, input.code ?? null, input.description ?? null, actor.ref, id, input.rowVersion],
+        [
+          input.name,
+          input.code ?? null,
+          input.description ?? null,
+          actor.ref,
+          id,
+          input.rowVersion,
+        ],
       );
       if (updated.rowCount === 0) throw staleError();
 

@@ -104,7 +104,9 @@ export async function inCommittedTransaction<T>(
 }
 
 export async function entityIdFor(pool: Pool, code: string): Promise<string> {
-  const result = await pool.query<{ id: string }>('SELECT id FROM entities WHERE code = $1', [code]);
+  const result = await pool.query<{ id: string }>('SELECT id FROM entities WHERE code = $1', [
+    code,
+  ]);
   const id = result.rows[0]?.id;
   if (!id) throw new Error(`The test database has no entity with code ${code}.`);
   return id;

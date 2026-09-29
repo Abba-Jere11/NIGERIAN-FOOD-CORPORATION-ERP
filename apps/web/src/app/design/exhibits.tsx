@@ -55,10 +55,38 @@ interface DemoRow {
 }
 
 const DEMO_ROWS: DemoRow[] = [
-  { reference: 'YFZ/PR/2026/0031', vendor: 'Kaduna Grain Traders', entity: 'YFZ', amountKobo: '1250050', status: 'AWAITING_MD', raisedAt: '21/09/2026 09:14' },
-  { reference: 'YFW/PR/2026/0018', vendor: 'Northern Sacks Ltd', entity: 'YFW', amountKobo: '48000000', status: 'COMPLETED', raisedAt: '18/09/2026 14:40' },
-  { reference: 'DMA/PR/2026/0009', vendor: 'Sahel Logistics', entity: 'DMA', amountKobo: '990000', status: 'REJECTED', raisedAt: '17/09/2026 08:05' },
-  { reference: 'NOM/PR/2026/0044', vendor: 'Benue Oil Mills', entity: 'NOM', amountKobo: '7350025', status: 'AWAITING_ED_FINANCE', raisedAt: '16/09/2026 16:22' },
+  {
+    reference: 'YFZ/PR/2026/0031',
+    vendor: 'Kaduna Grain Traders',
+    entity: 'YFZ',
+    amountKobo: '1250050',
+    status: 'AWAITING_MD',
+    raisedAt: '21/09/2026 09:14',
+  },
+  {
+    reference: 'YFW/PR/2026/0018',
+    vendor: 'Northern Sacks Ltd',
+    entity: 'YFW',
+    amountKobo: '48000000',
+    status: 'COMPLETED',
+    raisedAt: '18/09/2026 14:40',
+  },
+  {
+    reference: 'DMA/PR/2026/0009',
+    vendor: 'Sahel Logistics',
+    entity: 'DMA',
+    amountKobo: '990000',
+    status: 'REJECTED',
+    raisedAt: '17/09/2026 08:05',
+  },
+  {
+    reference: 'NOM/PR/2026/0044',
+    vendor: 'Benue Oil Mills',
+    entity: 'NOM',
+    amountKobo: '7350025',
+    status: 'AWAITING_ED_FINANCE',
+    raisedAt: '16/09/2026 16:22',
+  },
 ];
 
 function nairaFromKobo(kobo: string): string {

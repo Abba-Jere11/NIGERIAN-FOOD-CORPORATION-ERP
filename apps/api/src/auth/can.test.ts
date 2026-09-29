@@ -101,9 +101,7 @@ describe('can()', () => {
 describe('assertCan()', () => {
   it('says the role is the problem when the role is the problem', () => {
     expect(() => assertCan(actor({ role: 'gm' }), 'audit.view')).toThrow(ForbiddenError);
-    expect(() => assertCan(actor({ role: 'gm' }), 'audit.view')).toThrow(
-      /role does not permit/i,
-    );
+    expect(() => assertCan(actor({ role: 'gm' }), 'audit.view')).toThrow(/role does not permit/i);
   });
 
   it('says the subsidiary is the problem when the subsidiary is the problem', () => {

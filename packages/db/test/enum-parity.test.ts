@@ -1,10 +1,4 @@
-import {
-  AUDIT_ACTIONS,
-  ENTITY_TYPES,
-  RECORD_STATUSES,
-  ROLE_KEYS,
-  SCOPE_TYPES,
-} from '@nfc/shared';
+import { AUDIT_ACTIONS, ENTITY_TYPES, RECORD_STATUSES, ROLE_KEYS, SCOPE_TYPES } from '@nfc/shared';
 import type { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ownerPool } from './support';

@@ -22,12 +22,7 @@ describe('the organisation structure', () => {
 
   it('has exactly four subsidiaries', () => {
     expect(SUBSIDIARY_ENTITIES).toHaveLength(4);
-    expect(SUBSIDIARY_ENTITIES.map((entity) => entity.code)).toEqual([
-      'YFZ',
-      'YFW',
-      'DMA',
-      'NOM',
-    ]);
+    expect(SUBSIDIARY_ENTITIES.map((entity) => entity.code)).toEqual(['YFZ', 'YFW', 'DMA', 'NOM']);
   });
 
   it('marks every subsidiary as a subsidiary, never as a second holding company', () => {

@@ -22,7 +22,8 @@ export function Pagination({
   const last = Math.min(page * pageSize, total);
 
   const linkClass = 'border border-ink-300 bg-surface px-2.5 py-1 text-[13px] hover:bg-ink-100';
-  const disabledClass = 'border border-ink-200 bg-surface-muted px-2.5 py-1 text-[13px] text-ink-400';
+  const disabledClass =
+    'border border-ink-200 bg-surface-muted px-2.5 py-1 text-[13px] text-ink-400';
 
   return (
     <nav

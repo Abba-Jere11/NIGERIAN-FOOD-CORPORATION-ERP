@@ -39,7 +39,10 @@ export function AuditTable({ entries }: { entries: AuditEntryView[] }) {
         </thead>
         <tbody>
           {entries.map((entry) => (
-            <tr key={entry.id} className="avoid-break border-b border-ink-100 align-top last:border-0">
+            <tr
+              key={entry.id}
+              className="avoid-break border-b border-ink-100 align-top last:border-0"
+            >
               <td className="tabular whitespace-nowrap px-3 py-2 text-ink-700">
                 {formatLagosDateTime(entry.occurredAt)}
               </td>
@@ -56,7 +59,9 @@ export function AuditTable({ entries }: { entries: AuditEntryView[] }) {
                 <span className="block text-ink-900">
                   {entry.subjectLabel ?? entry.subjectReferenceNumber ?? '—'}
                 </span>
-                <span className="block font-mono text-[11px] text-ink-500">{entry.subjectType}</span>
+                <span className="block font-mono text-[11px] text-ink-500">
+                  {entry.subjectType}
+                </span>
               </td>
               <td className="whitespace-nowrap px-3 py-2 text-ink-700">
                 {entry.entityCode ?? <span className="text-ink-400">—</span>}

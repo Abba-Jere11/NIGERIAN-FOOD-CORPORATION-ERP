@@ -1,6 +1,11 @@
 'use client';
 
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import type {
+  InputHTMLAttributes,
+  ReactNode,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
+} from 'react';
 import { useId } from 'react';
 import { cx } from '@/lib/cx';
 
@@ -98,8 +103,10 @@ export function TextField({
   );
 }
 
-export interface TextAreaFieldProps
-  extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'id'> {
+export interface TextAreaFieldProps extends Omit<
+  TextareaHTMLAttributes<HTMLTextAreaElement>,
+  'id'
+> {
   label: string;
   hint?: string;
   errors?: string[];
@@ -175,7 +182,14 @@ export function DateField({
   ...rest
 }: Omit<TextFieldProps, 'type'>) {
   return (
-    <TextField label={label} hint={hint} errors={errors} required={required} type="date" {...rest} />
+    <TextField
+      label={label}
+      hint={hint}
+      errors={errors}
+      required={required}
+      type="date"
+      {...rest}
+    />
   );
 }
 

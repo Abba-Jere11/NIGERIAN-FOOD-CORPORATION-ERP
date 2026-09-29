@@ -40,10 +40,11 @@ export function assertCan(
     throw new ForbiddenError('You are not signed in.');
   }
   if (entityId && actor.role && roleHasPermission(actor.role, permission)) {
-    throw new ForbiddenError(
-      'You do not have access to this subsidiary.',
-      { permission, entityId, scope: actor.isCorporate ? 'CORPORATE' : 'ENTITY' },
-    );
+    throw new ForbiddenError('You do not have access to this subsidiary.', {
+      permission,
+      entityId,
+      scope: actor.isCorporate ? 'CORPORATE' : 'ENTITY',
+    });
   }
   throw new ForbiddenError('Your role does not permit this action.', {
     permission,

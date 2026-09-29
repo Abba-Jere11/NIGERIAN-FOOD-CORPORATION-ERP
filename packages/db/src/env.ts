@@ -121,22 +121,34 @@ function databaseFor(env: DatabaseEnv, target: DatabaseTarget): string {
 }
 
 /** Connection for migrations, seeds and fixtures. Bypasses RLS as table owner. */
-export function ownerConnection(target?: DatabaseTarget, env = loadDatabaseEnv()): DatabaseConnection {
+export function ownerConnection(
+  target?: DatabaseTarget,
+  env = loadDatabaseEnv(),
+): DatabaseConnection {
   const resolved = resolveTarget(target);
   const override =
     resolved === 'test' ? process.env.DATABASE_URL_TEST_OWNER : process.env.DATABASE_URL_OWNER;
   if (override && override.trim() !== '') {
-    return { ...buildUrl(env, env.ownerUser, env.ownerPassword, databaseFor(env, resolved)), connectionString: override };
+    return {
+      ...buildUrl(env, env.ownerUser, env.ownerPassword, databaseFor(env, resolved)),
+      connectionString: override,
+    };
   }
   return buildUrl(env, env.ownerUser, env.ownerPassword, databaseFor(env, resolved));
 }
 
 /** Connection the application uses. Subject to Row-Level Security. */
-export function appConnection(target?: DatabaseTarget, env = loadDatabaseEnv()): DatabaseConnection {
+export function appConnection(
+  target?: DatabaseTarget,
+  env = loadDatabaseEnv(),
+): DatabaseConnection {
   const resolved = resolveTarget(target);
   const override = resolved === 'test' ? process.env.DATABASE_URL_TEST : process.env.DATABASE_URL;
   if (override && override.trim() !== '') {
-    return { ...buildUrl(env, env.appUser, env.appPassword, databaseFor(env, resolved)), connectionString: override };
+    return {
+      ...buildUrl(env, env.appUser, env.appPassword, databaseFor(env, resolved)),
+      connectionString: override,
+    };
   }
   return buildUrl(env, env.appUser, env.appPassword, databaseFor(env, resolved));
 }

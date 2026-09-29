@@ -110,7 +110,7 @@ export default async function HomePage() {
                   label: 'Scope',
                   value: me.isCorporate
                     ? 'Group-wide (holding and all subsidiaries)'
-                    : (me.entities.map((entity) => entity.code).join(', ') || 'None'),
+                    : me.entities.map((entity) => entity.code).join(', ') || 'None',
                 },
                 {
                   label: 'Permissions',
@@ -132,8 +132,8 @@ export default async function HomePage() {
             <div className="mt-3">
               <Notice tone="warning">
                 This build has no sign-in yet. The identity in the top bar is a development actor,
-                added so that role and scope rules can be exercised before authentication is built in
-                M2. The server enforces them for real.
+                added so that role and scope rules can be exercised before authentication is built
+                in M2. The server enforces them for real.
               </Notice>
             </div>
           </Surface>

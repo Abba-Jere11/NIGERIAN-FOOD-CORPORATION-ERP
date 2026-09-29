@@ -58,7 +58,9 @@ export default async function EntityDetailPage({ params }: { params: Promise<{ i
             <SurfaceHeader
               title="Departments"
               description="Deactivating a department never removes it, and never touches the records that reference it."
-              actions={canManageDepartments ? <CreateDepartmentDialog entityId={entity.id} /> : null}
+              actions={
+                canManageDepartments ? <CreateDepartmentDialog entityId={entity.id} /> : null
+              }
             />
             <DepartmentsPanel
               entityId={entity.id}
@@ -83,9 +85,7 @@ export default async function EntityDetailPage({ params }: { params: Promise<{ i
                     text: `${AUDIT_ACTION_LABELS[entry.action]} — ${
                       entry.subjectLabel ?? entry.subjectType
                     }`,
-                    detail: entry.reason ? (
-                      <span className="italic">“{entry.reason}”</span>
-                    ) : null,
+                    detail: entry.reason ? <span className="italic">“{entry.reason}”</span> : null,
                   }))}
                 />
               </div>
@@ -109,7 +109,10 @@ export default async function EntityDetailPage({ params }: { params: Promise<{ i
             columns={1}
             items={[
               { label: 'Status', value: <StatusBadge status={entity.status} /> },
-              { label: 'Code', value: <span className="font-mono text-[12px]">{entity.code}</span> },
+              {
+                label: 'Code',
+                value: <span className="font-mono text-[12px]">{entity.code}</span>,
+              },
               {
                 label: 'Type',
                 value: entity.type === 'HOLDING' ? 'Holding company' : 'Subsidiary',
@@ -118,9 +121,18 @@ export default async function EntityDetailPage({ params }: { params: Promise<{ i
                 label: 'Departments',
                 value: `${entity.activeDepartmentCount} active of ${entity.departmentCount}`,
               },
-              { label: 'Created', value: <span className="tabular">{formatLagosDateTime(entity.createdAt)}</span> },
-              { label: 'Last changed', value: <span className="tabular">{formatLagosDateTime(entity.updatedAt)}</span> },
-              { label: 'Record version', value: <span className="tabular">{entity.rowVersion}</span> },
+              {
+                label: 'Created',
+                value: <span className="tabular">{formatLagosDateTime(entity.createdAt)}</span>,
+              },
+              {
+                label: 'Last changed',
+                value: <span className="tabular">{formatLagosDateTime(entity.updatedAt)}</span>,
+              },
+              {
+                label: 'Record version',
+                value: <span className="tabular">{entity.rowVersion}</span>,
+              },
             ]}
           />
         </Surface>

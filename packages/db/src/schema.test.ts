@@ -1,12 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  AUDIT_ACTIONS,
-  ENTITY_TYPES,
-  RECORD_STATUSES,
-  ROLE_KEYS,
-  SCOPE_TYPES,
-} from '@nfc/shared';
+import { AUDIT_ACTIONS, ENTITY_TYPES, RECORD_STATUSES, ROLE_KEYS, SCOPE_TYPES } from '@nfc/shared';
 import { describe, expect, it } from 'vitest';
 import { migrationsDir } from './env';
 import { loadMigrationFiles } from './migrator';

@@ -19,18 +19,18 @@ proceed if an already-applied file has changed. Corrections are made by adding a
 
 ## Naming
 
-| Thing | Convention | Example |
-| --- | --- | --- |
-| Table | plural, `snake_case` | `procurement_requests` |
-| Column | `snake_case` | `memo_snapshot_hash` |
-| Primary key | `id`, `uuid`, `gen_random_uuid()` | |
-| Foreign key | `<singular_referent>_id` | `entity_id`, `parent_entity_id` |
-| Index | `<table>_<columns>_idx` | `audit_log_occurred_at_idx` |
-| Unique index | `<table>_<columns>_key` | `departments_entity_name_key` |
-| Check constraint | `<table>_<rule>` | `entities_parent_matches_type` |
-| Trigger | `<table>_<purpose>` | `entities_validate_parent` |
-| Enum type | singular, `snake_case` | `entity_type`, `audit_action` |
-| Helper function | `app.<verb>_<noun>()` | `app.can_access_entity()` |
+| Thing            | Convention                        | Example                         |
+| ---------------- | --------------------------------- | ------------------------------- |
+| Table            | plural, `snake_case`              | `procurement_requests`          |
+| Column           | `snake_case`                      | `memo_snapshot_hash`            |
+| Primary key      | `id`, `uuid`, `gen_random_uuid()` |                                 |
+| Foreign key      | `<singular_referent>_id`          | `entity_id`, `parent_entity_id` |
+| Index            | `<table>_<columns>_idx`           | `audit_log_occurred_at_idx`     |
+| Unique index     | `<table>_<columns>_key`           | `departments_entity_name_key`   |
+| Check constraint | `<table>_<rule>`                  | `entities_parent_matches_type`  |
+| Trigger          | `<table>_<purpose>`               | `entities_validate_parent`      |
+| Enum type        | singular, `snake_case`            | `entity_type`, `audit_action`   |
+| Helper function  | `app.<verb>_<noun>()`             | `app.can_access_entity()`       |
 
 TypeScript uses `camelCase` and Drizzle is configured with `casing: 'snake_case'`, so the mapping is
 automatic and no column aliases are needed.
@@ -103,13 +103,13 @@ bypasses RLS so bootstrap work is possible.
 
 Each request opens a transaction and publishes the actor into transaction-scoped session variables:
 
-| Variable | Meaning |
-| --- | --- |
-| `app.actor_ref` | acting user uuid, or a named system actor |
-| `app.actor_role` | the role key held at the time of the request |
-| `app.entity_ids` | comma-separated uuids the actor may reach |
-| `app.is_corporate` | `true` for group-wide scope |
-| `app.request_id` | correlation id shared with the structured logs |
+| Variable           | Meaning                                        |
+| ------------------ | ---------------------------------------------- |
+| `app.actor_ref`    | acting user uuid, or a named system actor      |
+| `app.actor_role`   | the role key held at the time of the request   |
+| `app.entity_ids`   | comma-separated uuids the actor may reach      |
+| `app.is_corporate` | `true` for group-wide scope                    |
+| `app.request_id`   | correlation id shared with the structured logs |
 
 `set_config(..., true)` scopes these to the transaction, so a value cannot leak to the next request
 that borrows the same pooled connection.

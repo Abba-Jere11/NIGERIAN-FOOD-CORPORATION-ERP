@@ -39,7 +39,8 @@ export const ROLES: Record<RoleKey, RoleDefinition> = {
     name: 'Executive Director, Operations',
     shortName: 'ED Operations',
     scopeType: 'CORPORATE',
-    responsibility: 'First approver on procurement after the GM. Views inventory across all subsidiaries.',
+    responsibility:
+      'First approver on procurement after the GM. Views inventory across all subsidiaries.',
   },
   md: {
     key: 'md',

@@ -45,7 +45,10 @@ export default function DesignPage() {
       />
 
       <div className="space-y-4">
-        <Section title="Colour" note="A deep green accent, neutral greys, one warning and one danger.">
+        <Section
+          title="Colour"
+          note="A deep green accent, neutral greys, one warning and one danger."
+        >
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
             {[
               ['accent-900', 'bg-accent-900'],
@@ -69,7 +72,10 @@ export default function DesignPage() {
           </div>
         </Section>
 
-        <Section title="Buttons" note="One primary action per screen. Danger is reserved for destructive intent.">
+        <Section
+          title="Buttons"
+          note="One primary action per screen. Danger is reserved for destructive intent."
+        >
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="primary">Primary</Button>
             <Button variant="secondary">Secondary</Button>
@@ -119,9 +125,26 @@ export default function DesignPage() {
           <div className="space-y-6">
             <ApprovalTracker
               stages={[
-                { key: 'raise', label: 'Raised', state: 'done', actor: 'Finance Head, YFZ', at: formatLagosDateTime('2026-09-21T09:14:00Z') },
-                { key: 'gm', label: 'GM approval', state: 'done', actor: 'GM, YFZ', at: formatLagosDateTime('2026-09-21T11:02:00Z') },
-                { key: 'ops', label: 'Operations review', state: 'current', actor: 'ED Operations' },
+                {
+                  key: 'raise',
+                  label: 'Raised',
+                  state: 'done',
+                  actor: 'Finance Head, YFZ',
+                  at: formatLagosDateTime('2026-09-21T09:14:00Z'),
+                },
+                {
+                  key: 'gm',
+                  label: 'GM approval',
+                  state: 'done',
+                  actor: 'GM, YFZ',
+                  at: formatLagosDateTime('2026-09-21T11:02:00Z'),
+                },
+                {
+                  key: 'ops',
+                  label: 'Operations review',
+                  state: 'current',
+                  actor: 'ED Operations',
+                },
                 { key: 'md', label: 'MD approval', state: 'pending' },
                 { key: 'pay', label: 'Payment', state: 'pending' },
               ]}
@@ -151,11 +174,19 @@ export default function DesignPage() {
             columns={2}
             items={[
               { label: 'Typed', value: <span className="tabular">4,500.50</span> },
-              { label: 'Stored (kobo)', value: <span className="tabular font-mono">{sampleKobo.toString()}</span> },
-              { label: 'Displayed', value: <span className="tabular">{formatKobo(sampleKobo)}</span> },
+              {
+                label: 'Stored (kobo)',
+                value: <span className="tabular font-mono">{sampleKobo.toString()}</span>,
+              },
+              {
+                label: 'Displayed',
+                value: <span className="tabular">{formatKobo(sampleKobo)}</span>,
+              },
               {
                 label: 'Timestamp',
-                value: <span className="tabular">{formatLagosDateTime('2026-09-21T09:14:00Z')}</span>,
+                value: (
+                  <span className="tabular">{formatLagosDateTime('2026-09-21T09:14:00Z')}</span>
+                ),
               },
             ]}
           />
@@ -168,7 +199,10 @@ export default function DesignPage() {
           <DesignTableExhibit />
         </Section>
 
-        <Section title="Timeline" note="Date, time, actor and what happened. The shape every record history uses.">
+        <Section
+          title="Timeline"
+          note="Date, time, actor and what happened. The shape every record history uses."
+        >
           <Timeline
             entries={[
               {
@@ -215,9 +249,7 @@ export default function DesignPage() {
             <Notice tone="warning">
               This requisition has been awaiting MD approval for four working days.
             </Notice>
-            <Notice tone="danger">
-              This vendor is blacklisted and cannot be selected.
-            </Notice>
+            <Notice tone="danger">This vendor is blacklisted and cannot be selected.</Notice>
           </div>
         </Section>
 

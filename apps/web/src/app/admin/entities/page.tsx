@@ -41,8 +41,9 @@ export default async function EntitiesPage() {
       {!me.isCorporate ? (
         <div className="mb-4">
           <Notice tone="info">
-            You are seeing only {me.entities.map((entity) => entity.name).join(', ') || 'your own subsidiary'}.
-            Records belonging to other subsidiaries are not returned to you.
+            You are seeing only{' '}
+            {me.entities.map((entity) => entity.name).join(', ') || 'your own subsidiary'}. Records
+            belonging to other subsidiaries are not returned to you.
           </Notice>
         </div>
       ) : null}

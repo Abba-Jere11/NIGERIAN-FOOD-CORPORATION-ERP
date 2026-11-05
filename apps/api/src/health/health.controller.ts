@@ -1,7 +1,7 @@
 import { Controller, Get, Inject } from '@nestjs/common';
 import type { Pool } from 'pg';
 import { Public } from '../auth/public.decorator';
-import { APP_POOL } from '../database/database.module';
+import { APP_POOL } from '../database/tokens';
 import { loadApiEnv } from '../config/env';
 
 /**

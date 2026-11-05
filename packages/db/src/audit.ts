@@ -52,20 +52,11 @@ export function assertAuditEntryValid(entry: AuditEntryInput): void {
 }
 
 const INSERT_SQL = `
-  INSERT INTO audit_log (
-    actor_user_id, actor_system_name, actor_name,
-    actor_role, actor_scope_type, actor_scope_entity_ids,
-    action, subject_type, subject_id, subject_label, subject_reference_number,
-    entity_id, old_value, new_value, reason,
-    ip_address, user_agent, session_id, request_id
-  ) VALUES (
-    $1, $2, $3,
-    $4, $5, $6::uuid[],
-    $7, $8, $9, $10, $11,
-    $12, $13::jsonb, $14::jsonb, $15,
-    $16, $17, $18, $19
+  SELECT id, occurred_at FROM app.write_audit_entry(
+    $1::uuid, $2::text, $3::text, $4::role_key, $5::scope_type, $6::uuid[],
+    $7::audit_action, $8::text, $9::uuid, $10::text, $11::text,
+    $12::uuid, $13::jsonb, $14::jsonb, $15::text, $16::inet, $17::text, $18::text, $19::text
   )
-  RETURNING id, occurred_at
 `;
 
 export interface AuditEntryWritten {

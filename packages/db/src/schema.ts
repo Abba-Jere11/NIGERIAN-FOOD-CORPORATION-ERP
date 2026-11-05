@@ -33,7 +33,13 @@ export const roleKeyEnum = pgEnum('role_key', [
   'md',
   'ed_finance',
   'finance_head',
+  'administrator',
+  'inventory_officer',
+  'hr_officer',
+  'staff',
 ]);
+
+export const userStatusEnum = pgEnum('user_status', ['ACTIVE', 'SUSPENDED', 'DEACTIVATED', 'PENDING_APPROVAL']);
 
 export const auditActionEnum = pgEnum('audit_action', [
   'login',

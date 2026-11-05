@@ -56,6 +56,12 @@ function parts(formatter: Intl.DateTimeFormat, value: Date): PartMap {
   return result;
 }
 
+/** `2026-09-29` in Africa/Lagos — used for date-only comparisons. */
+export function formatLagosIsoDate(value: Date | string | number): string {
+  const p = parts(DATE_FORMAT, toDate(value));
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
 /** `29/09/2026` */
 export function formatLagosDate(value: Date | string | number): string {
   const p = parts(DATE_FORMAT, toDate(value));

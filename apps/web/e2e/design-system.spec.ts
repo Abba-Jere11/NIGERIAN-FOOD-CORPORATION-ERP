@@ -1,11 +1,9 @@
 import { expect, test } from '@playwright/test';
+import { loginAs } from './support';
 
-/**
- * M1 acceptance: every design-system component renders on `/design`, and the
- * approval tracker shows the three marks.
- */
 test.describe('the design system reference', () => {
   test.beforeEach(async ({ page }) => {
+    await loginAs(page, 'md@nfc.local');
     await page.goto('/design');
   });
 
@@ -21,6 +19,7 @@ test.describe('the design system reference', () => {
       'Timeline',
       'Empty, loading and error states',
       'Dialogs and toasts',
+      'Seals',
       'Print',
     ]) {
       await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
@@ -119,14 +118,16 @@ test.describe('the design system reference', () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText('Nothing is deleted')).toBeVisible();
 
-    await dialog.getByLabel('Reason').fill('Too short');
+    // Five spaces pass the HTML minLength but fail after trim, so the server
+    // error is what appears rather than the browser's native tooltip.
+    await dialog.getByLabel('Reason').fill('     ');
     await dialog.getByRole('button', { name: 'Deactivate' }).click();
     await expect(dialog.getByText(/at least five characters/)).toBeVisible();
 
     await dialog.getByLabel('Reason').fill('A full explanation of why this is being deactivated.');
     await dialog.getByRole('button', { name: 'Deactivate' }).click();
     await expect(dialog).toBeHidden();
-    await expect(page.getByRole('status')).toContainText('deactivated');
+    await expect(page.getByRole('status').filter({ hasText: /deactivated/i })).toBeVisible();
   });
 
   test('keeps a failed action open and reports why', async ({ page }) => {
@@ -165,7 +166,6 @@ test.describe('the design system reference', () => {
   test('hides the application furniture when printing', async ({ page }) => {
     await page.emulateMedia({ media: 'print' });
     await expect(page.getByRole('navigation', { name: 'Modules' })).toBeHidden();
-    await expect(page.getByLabel('Acting as')).toBeHidden();
     await expect(page.getByRole('heading', { name: 'Design system' })).toBeVisible();
   });
 });

@@ -29,6 +29,9 @@ const SEED_ACTOR: ActorContext = {
   scopeType: null,
   entityIds: [],
   isCorporate: true,
+  isAdmin: false,
+  permissions: [],
+  homePath: null,
   requestId: 'seed',
 };
 

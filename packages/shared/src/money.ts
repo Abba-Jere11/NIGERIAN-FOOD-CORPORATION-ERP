@@ -62,8 +62,7 @@ export function splitKobo(amount: Kobo): { negative: boolean; naira: bigint; kob
   };
 }
 
-function groupThousands(value: bigint): string {
-  const digits = value.toString();
+function groupDigits(digits: string): string {
   let out = '';
   for (let i = 0; i < digits.length; i += 1) {
     if (i > 0 && (digits.length - i) % 3 === 0) out += ',';
@@ -72,10 +71,80 @@ function groupThousands(value: bigint): string {
   return out;
 }
 
+function groupThousands(value: bigint): string {
+  return groupDigits(value.toString());
+}
+
+/**
+ * Re-formats a money input while the user types: thousands are grouped
+ * (`1000000` → `1,000,000`), at most two decimal places are kept, and anything
+ * that is not a digit, the first decimal point or a leading minus is dropped.
+ * `caret` is the cursor position in `input`; the returned caret sits after the
+ * same digit in the formatted text, so typing in the middle of a number works.
+ */
+export function formatNairaTyping(input: string, caret: number = input.length): { text: string; caret: number } {
+  const negative = input.trimStart().startsWith('-');
+  let whole = '';
+  let fraction = '';
+  let seenPoint = false;
+  let wholeBeforeCaret = 0;
+  let fractionBeforeCaret = 0;
+  let pointBeforeCaret = false;
+
+  for (let i = 0; i < input.length; i += 1) {
+    const ch = input.charAt(i);
+    const beforeCaret = i < caret;
+    if (ch >= '0' && ch <= '9') {
+      if (seenPoint) {
+        if (fraction.length < 2) {
+          fraction += ch;
+          if (beforeCaret) fractionBeforeCaret += 1;
+        }
+      } else {
+        whole += ch;
+        if (beforeCaret) wholeBeforeCaret += 1;
+      }
+    } else if (ch === '.' && !seenPoint) {
+      seenPoint = true;
+      if (beforeCaret) pointBeforeCaret = true;
+    }
+  }
+
+  const stripped = whole.replace(/^0+(?=\d)/, '');
+  wholeBeforeCaret = Math.max(0, wholeBeforeCaret - (whole.length - stripped.length));
+  const wholeText = stripped === '' && seenPoint ? '0' : stripped;
+  if (stripped === '' && seenPoint && pointBeforeCaret) wholeBeforeCaret = 1;
+  const grouped = groupDigits(wholeText);
+  const sign = negative ? '-' : '';
+  const text = `${sign}${grouped}${seenPoint ? `.${fraction}` : ''}`;
+
+  if (pointBeforeCaret) {
+    return { text, caret: sign.length + grouped.length + 1 + fractionBeforeCaret };
+  }
+  let position = 0;
+  let digits = 0;
+  while (position < grouped.length && digits < wholeBeforeCaret) {
+    if (grouped.charAt(position) !== ',') digits += 1;
+    position += 1;
+  }
+  return { text, caret: sign.length + position };
+}
+
 /** Formats kobo without a currency symbol, e.g. `50,000,000.00`. */
 export function formatKoboPlain(amount: Kobo): string {
   const { negative, naira, kobo: koboPart } = splitKobo(amount);
   const body = `${groupThousands(naira)}.${koboPart.toString().padStart(2, '0')}`;
+  return negative ? `-${body}` : body;
+}
+
+/**
+ * Formats stored kobo for a money input. Whole Naira stay whole
+ * (`50000000` → `500,000`); a decimal appears only when there is a kobo remainder.
+ */
+export function formatNairaInputFromKobo(amount: Kobo): string {
+  const { negative, naira, kobo: koboPart } = splitKobo(amount);
+  const whole = groupThousands(naira);
+  const body = koboPart === 0n ? whole : `${whole}.${koboPart.toString().padStart(2, '0')}`;
   return negative ? `-${body}` : body;
 }
 

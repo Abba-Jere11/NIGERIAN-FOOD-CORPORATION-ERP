@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { EntityType, RecordStatus } from '@nfc/shared';
 import type { Pool } from 'pg';
-import { APP_POOL } from '../database/database.module';
+import { APP_POOL } from '../database/tokens';
 
 export interface DirectoryEntity {
   id: string;

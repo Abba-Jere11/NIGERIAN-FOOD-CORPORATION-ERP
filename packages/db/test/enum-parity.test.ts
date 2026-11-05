@@ -43,10 +43,10 @@ describe('SQL enums match the shared TypeScript constants', () => {
     expect(await labelsOf('scope_type')).toEqual([...SCOPE_TYPES]);
   });
 
-  it('role_key holds exactly the five roles from A5', async () => {
+  it('role_key holds the eight roles from A5', async () => {
     const labels = await labelsOf('role_key');
     expect(labels).toEqual([...ROLE_KEYS]);
-    expect(labels).toHaveLength(5);
+    expect(labels).toHaveLength(9);
   });
 
   it('audit_action holds the full action vocabulary, in order', async () => {

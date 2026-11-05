@@ -125,8 +125,10 @@ export function ActionDialog({
     async (previous: ActionResult, formData: FormData): Promise<ActionResult> => {
       const result = await action(previous, formData);
       if (result.status === 'ok') {
-        toast(successMessage, 'success');
+        toast(result.message || successMessage, 'success');
         setOpen(false);
+      } else if (result.status === 'error') {
+        toast(`${title}: ${result.message}`, 'error');
       }
       return result;
     },

@@ -3,6 +3,20 @@ import { createPool } from '../src/client';
 import { loadDatabaseEnv, maintenanceConnection, ownerConnection } from '../src/env';
 import { runMigrations } from '../src/migrator';
 import { seedOrganizationStructure } from '../src/seed';
+import { seedEngines } from '../src/seed-engines';
+import { seedIdentity } from '../src/seed-identity';
+import { seedM4 } from '../src/seed-m4';
+import { seedM5 } from '../src/seed-m5';
+import { seedM6 } from '../src/seed-m6';
+import { seedM7 } from '../src/seed-m7';
+import { seedM8 } from '../src/seed-m8';
+import { seedM9 } from '../src/seed-m9';
+import { seedM10 } from '../src/seed-m10';
+import { seedM11 } from '../src/seed-m11';
+import { seedM12 } from '../src/seed-m12';
+import { seedM13 } from '../src/seed-m13';
+import { seedM14 } from '../src/seed-m14';
+import { seedM15 } from '../src/seed-m15';
 import { quoteIdentifier, quoteLiteral } from '../src/cli/shared';
 
 /**
@@ -46,6 +60,32 @@ export default async function setup(): Promise<void> {
     }
 
     await seedOrganizationStructure(pool);
+    const password = process.env.SEED_USER_PASSWORD;
+    if (!password) {
+      throw new Error('SEED_USER_PASSWORD is required to seed identities for the integration tests.');
+    }
+    const mfaKey = process.env.MFA_ENCRYPTION_KEY?.trim() || null;
+    const skip = ['true', '1', 'yes'].includes(
+      (process.env.SEED_E2E_SKIP_MUST_CHANGE ?? '').toLowerCase(),
+    );
+    await seedIdentity(pool, {
+      password,
+      e2eReady: skip && Boolean(mfaKey),
+      mfaEncryptionKey: mfaKey,
+    });
+    await seedEngines(pool);
+    await seedM4(pool);
+    await seedM5(pool);
+    await seedM6(pool);
+    await seedM7(pool);
+    await seedM8(pool);
+    await seedM9(pool);
+    await seedM10(pool);
+    await seedM11(pool);
+    await seedM12(pool);
+    await seedM13(pool);
+    await seedM14(pool);
+    await seedM15(pool);
   } finally {
     await pool.end();
   }

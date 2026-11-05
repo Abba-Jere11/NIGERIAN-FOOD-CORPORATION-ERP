@@ -18,7 +18,7 @@
     "test:unit": "pnpm -r test:unit",
     "test:integration": "pnpm --filter @nfc/db test:integration",
     "test:e2e": "pnpm --filter @nfc/web test:e2e",
-    "verify": "pnpm lint && pnpm build && pnpm typecheck && pnpm test",
+    "verify": "pnpm lint && node scripts/check-no-role-branch.mjs && node scripts/check-api-guards.mjs && pnpm build && pnpm typecheck && pnpm test",
     "db:bootstrap": "pnpm --filter @nfc/db bootstrap",
     "db:migrate": "pnpm --filter @nfc/db migrate",
     "db:seed": "pnpm --filter @nfc/db seed",

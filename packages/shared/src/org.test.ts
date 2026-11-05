@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { AUDIT_ACTIONS, AUDIT_ACTION_LABELS, SYSTEM_ACTORS } from './audit';
-import { DEV_ACTORS, DEFAULT_DEV_ACTOR_KEY, devActorKeys } from './dev-actors';
 import {
   DEFAULT_DEPARTMENTS,
   HOLDING_ENTITY,
   ORGANIZATION_CODE,
+  ROLE_KEYS,
   ROLES,
   SUBSIDIARY_ENTITIES,
 } from './org';
+import { SEED_USERS } from './seed-users';
 
 /**
  * A4: Nigeria Food Corporation is the holding company and the four subsidiaries
@@ -69,7 +70,12 @@ describe('the audit action vocabulary', () => {
   });
 
   it('names every permitted system actor, so none can act anonymously (R1)', () => {
-    expect([...SYSTEM_ACTORS]).toEqual(['system:seed', 'system:escalation', 'system:outbox']);
+    expect([...SYSTEM_ACTORS]).toEqual([
+      'system:seed',
+      'system:escalation',
+      'system:outbox',
+      'system:edms',
+    ]);
     for (const name of SYSTEM_ACTORS) {
       expect(name.startsWith('system:')).toBe(true);
     }
@@ -82,49 +88,41 @@ describe('the audit action vocabulary', () => {
   });
 });
 
-/**
- * The dev-actor registry is M1's declared bridge in place of authentication. It
- * is deleted in M2, but while it exists it must cover every role and subsidiary,
- * or the role rules cannot be exercised at all.
- */
-describe('the development actor registry', () => {
-  it('has a default actor that exists', () => {
-    expect(devActorKeys()).toContain(DEFAULT_DEV_ACTOR_KEY);
+describe('the seeded identities', () => {
+  it('covers all nine roles', () => {
+    const roles = new Set(SEED_USERS.map((user) => user.role));
+    expect(roles).toEqual(new Set(ROLE_KEYS));
   });
 
-  it('has unique keys', () => {
-    const keys = devActorKeys();
-    expect(new Set(keys).size).toBe(keys.length);
-  });
-
-  it('covers all five roles', () => {
-    const roles = new Set(DEV_ACTORS.map((actor) => actor.role));
-    expect(roles).toEqual(new Set(Object.keys(ROLES)));
+  it('keeps unique emails and ids', () => {
+    expect(new Set(SEED_USERS.map((user) => user.id)).size).toBe(SEED_USERS.length);
+    expect(new Set(SEED_USERS.map((user) => user.email)).size).toBe(SEED_USERS.length);
   });
 
   it('covers every subsidiary for both entity-scoped roles', () => {
     for (const role of ['gm', 'finance_head'] as const) {
-      const codes = DEV_ACTORS.filter((actor) => actor.role === role)
-        .map((actor) => actor.entityCode)
+      const codes = SEED_USERS.filter((user) => user.role === role)
+        .map((user) => user.entityCode)
         .sort();
       expect(codes).toEqual(['DMA', 'NOM', 'YFW', 'YFZ']);
     }
   });
 
-  it('gives entity-scoped actors an entity and corporate actors none', () => {
-    for (const actor of DEV_ACTORS) {
-      if (actor.scopeType === 'ENTITY') {
-        expect(actor.entityCode).toBeTruthy();
+  it('gives entity-scoped users an entity and corporate users none', () => {
+    for (const user of SEED_USERS) {
+      if (user.scopeType === 'ENTITY') {
+        expect(user.entityCode).toBeTruthy();
       } else {
-        expect(actor.entityCode).toBeNull();
+        expect(user.entityCode).toBeNull();
       }
-      expect(actor.scopeType).toBe(ROLES[actor.role].scopeType);
+      expect(user.scopeType).toBe(ROLES[user.role].scopeType);
     }
   });
 
-  it('identifies every actor with a uuid, so audit rows look the way M2 will write them', () => {
-    for (const actor of DEV_ACTORS) {
-      expect(actor.userId).toMatch(
+  it('identifies every user with a uuid, matching the M1 audit actor ids plus the Administrator', () => {
+    expect(SEED_USERS).toHaveLength(16);
+    for (const user of SEED_USERS) {
+      expect(user.id).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
       );
     }

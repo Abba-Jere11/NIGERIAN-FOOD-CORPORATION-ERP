@@ -6,14 +6,17 @@ export function Surface({
   children,
   className,
   padded = true,
+  id,
 }: {
   children: ReactNode;
   className?: string;
   padded?: boolean;
+  id?: string;
 }) {
   return (
     <section
-      className={cx('print-surface border border-ink-200 bg-surface', padded && 'p-4', className)}
+      id={id}
+      className={cx('print-surface scroll-mt-4 border border-ink-200 bg-surface', padded && 'p-4', className)}
     >
       {children}
     </section>

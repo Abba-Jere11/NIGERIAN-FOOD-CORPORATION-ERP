@@ -1,30 +1,62 @@
-import { expect, type Page } from '@playwright/test';
+import { Secret, TOTP } from 'otpauth';
+import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { TOTP_FIXTURE_SECRET } from '@nfc/shared';
 
-/**
- * Switches the acting identity, which in M1 is the dev-actor bridge standing in
- * for authentication. The select is the same control a developer uses, so the
- * tests exercise the real path rather than setting a cookie behind the
- * application's back.
- */
-export async function actAs(page: Page, actorKey: string): Promise<void> {
-  const switcher = page.getByLabel('Acting as');
-  await expect(switcher).toBeVisible();
-  await switcher.selectOption(actorKey);
-  // The server action revalidates the layout, so wait for the identity to change
-  // rather than for a fixed delay.
-  await expect(switcher).toHaveValue(actorKey);
-  await page.waitForLoadState('networkidle');
+const PASSWORD = process.env.SEED_USER_PASSWORD ?? '';
+
+export function totpNow(secret = TOTP_FIXTURE_SECRET): string {
+  const totp = new TOTP({
+    issuer: 'NFC',
+    label: 'NFC',
+    algorithm: 'SHA1',
+    digits: 6,
+    period: 30,
+    secret: Secret.fromBase32(secret),
+  });
+  return totp.generate();
 }
 
-export async function goto(page: Page, path: string, actorKey?: string): Promise<void> {
-  await page.goto(path);
-  if (actorKey) {
-    await actAs(page, actorKey);
-    if (page.url().endsWith(path) === false) await page.goto(path);
+export async function loginAs(page: Page, email: string): Promise<void> {
+  if (!PASSWORD) {
+    throw new Error('SEED_USER_PASSWORD must be set for end-to-end tests.');
+  }
+  // Sign in through the API so session cookies land on the shared 127.0.0.1 host
+  // (Playwright cookies are per-domain, not per-port). The login form is covered
+  // by identity.spec.ts; this helper only needs an authenticated browser.
+  await apiLogin(page.request, email);
+  await page.goto('/', { waitUntil: 'commit' });
+  await page.waitForURL((url) => url.pathname === '/home' || url.pathname.startsWith('/home/'), {
+    timeout: 45_000,
+  });
+}
+
+export async function apiLogin(request: APIRequestContext, email: string): Promise<void> {
+  if (!PASSWORD) {
+    throw new Error('SEED_USER_PASSWORD must be set for end-to-end tests.');
+  }
+  const api = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4000';
+  const login = await request.post(`${api}/api/auth/login`, {
+    data: { email, password: PASSWORD },
+  });
+  expect(login.ok(), `login failed for ${email}`).toBeTruthy();
+  const body = (await login.json()) as { mfaRequired?: boolean };
+  if (body.mfaRequired) {
+    const mfa = await request.post(`${api}/api/auth/mfa`, { data: { code: totpNow() } });
+    expect(mfa.ok(), `mfa failed for ${email}`).toBeTruthy();
   }
 }
 
-/** A unique suffix, so a re-run does not collide with rows left by the last one. */
+export async function goto(page: Page, path: string, email?: string): Promise<void> {
+  if (email) await loginAs(page, email);
+  await page.goto(path, { waitUntil: 'commit' });
+}
+
+export async function csrfHeaders(request: APIRequestContext): Promise<Record<string, string>> {
+  const state = await request.storageState();
+  const token = state.cookies.find((cookie) => cookie.name === 'nfc_csrf')?.value;
+  return token ? { 'x-csrf-token': token } : {};
+}
+
 export function unique(prefix: string): string {
   return `${prefix} ${Date.now().toString(36).toUpperCase()}`;
 }

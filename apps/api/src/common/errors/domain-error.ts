@@ -10,7 +10,9 @@ export type DomainErrorCode =
   | 'REASON_REQUIRED'
   | 'FORBIDDEN'
   | 'UNAUTHENTICATED'
-  | 'APPEND_ONLY_VIOLATION';
+  | 'APPEND_ONLY_VIOLATION'
+  | 'RATE_LIMITED'
+  | 'STEP_UP_REQUIRED';
 
 export class DomainError extends Error {
   readonly code: DomainErrorCode;
@@ -80,5 +82,17 @@ export class ForbiddenError extends DomainError {
 export class UnauthenticatedError extends DomainError {
   constructor(message: string) {
     super('UNAUTHENTICATED', 401, message);
+  }
+}
+
+export class RateLimitedError extends DomainError {
+  constructor(message: string) {
+    super('RATE_LIMITED', 429, message);
+  }
+}
+
+export class StepUpRequiredError extends DomainError {
+  constructor(message = 'Re-confirm with your authenticator to continue.') {
+    super('STEP_UP_REQUIRED', 403, message);
   }
 }

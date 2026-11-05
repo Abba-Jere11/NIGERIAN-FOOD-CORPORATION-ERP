@@ -4,6 +4,8 @@ import {
   amountInWords,
   formatKobo,
   formatKoboPlain,
+  formatNairaInputFromKobo,
+  formatNairaTyping,
   integerToWords,
   kobo,
   koboFromDb,
@@ -80,6 +82,55 @@ describe('formatting', () => {
     expect(formatKoboPlain(100n)).toBe('1.00');
     expect(formatKoboPlain(100_000n)).toBe('1,000.00');
     expect(formatKoboPlain(100_000_000n)).toBe('1,000,000.00');
+  });
+
+  it('formats input as face-value Naira without inventing a decimal', () => {
+    expect(parseNairaToKobo('500000')).toBe(50_000_000n);
+    expect(formatNairaInputFromKobo(50_000_000n)).toBe('500,000');
+    expect(formatNairaInputFromKobo(50_000_000n)).not.toBe('5,000.00');
+    expect(parseNairaToKobo(formatNairaInputFromKobo(50_000_000n))).toBe(50_000_000n);
+    expect(formatNairaInputFromKobo(50_000_050n)).toBe('500,000.50');
+    expect(parseNairaToKobo('50,000,000')).toBe(5_000_000_000n);
+    expect(formatNairaInputFromKobo(5_000_000_000n)).toBe('50,000,000');
+  });
+});
+
+describe('formatNairaTyping', () => {
+  it('groups thousands as the user types', () => {
+    expect(formatNairaTyping('1000000')).toEqual({ text: '1,000,000', caret: 9 });
+    expect(formatNairaTyping('1,0000')).toEqual({ text: '10,000', caret: 6 });
+    expect(formatNairaTyping('999')).toEqual({ text: '999', caret: 3 });
+    expect(formatNairaTyping('')).toEqual({ text: '', caret: 0 });
+  });
+
+  it('keeps the value parseable to the same kobo', () => {
+    expect(parseNairaToKobo(formatNairaTyping('1234567.89').text)).toBe(123_456_789n);
+    expect(formatNairaTyping('1234567.89').text).toBe('1,234,567.89');
+  });
+
+  it('keeps at most two decimals and one decimal point', () => {
+    expect(formatNairaTyping('12.345').text).toBe('12.34');
+    expect(formatNairaTyping('12.3.4').text).toBe('12.34');
+    expect(formatNairaTyping('.5')).toEqual({ text: '0.5', caret: 3 });
+  });
+
+  it('drops letters and stray symbols', () => {
+    expect(formatNairaTyping('₦1a2b3').text).toBe('123');
+    expect(formatNairaTyping('-5000').text).toBe('-5,000');
+  });
+
+  it('strips leading zeros', () => {
+    expect(formatNairaTyping('0005000').text).toBe('5,000');
+    expect(formatNairaTyping('0').text).toBe('0');
+  });
+
+  it('keeps the caret after the same digit when typing in the middle', () => {
+    // "1,000" with the caret after "1", user types "2" → "12,000" with caret after "2".
+    expect(formatNairaTyping('12,000', 2)).toEqual({ text: '12,000', caret: 2 });
+    // "10,000" → delete the comma side: "10000" caret after "10" → "10,000" caret after "10".
+    expect(formatNairaTyping('10000', 2)).toEqual({ text: '10,000', caret: 2 });
+    // "999" + "9" at the end → "9,999" with caret at the end.
+    expect(formatNairaTyping('9999', 4)).toEqual({ text: '9,999', caret: 5 });
   });
 });
 

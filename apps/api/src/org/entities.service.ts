@@ -33,10 +33,9 @@ interface EntityRowRaw {
 /**
  * Entity administration (M1 items 3 and 4).
  *
- * Held by the MD, which in the five-role model is the role that carries system
- * administration (A5). Entities are deactivated, never deleted: the database
- * refuses DELETE outright (rule R3), and the application role holds no DELETE
- * privilege either.
+ * Held by the Administrator (organization.entity.manage). Entities are
+ * deactivated, never deleted: the database refuses DELETE outright (rule R3),
+ * and the application role holds no DELETE privilege either.
  */
 @Injectable()
 export class EntitiesService {

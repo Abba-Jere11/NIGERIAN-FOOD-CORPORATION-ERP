@@ -30,6 +30,19 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
+      minio:
+        image: bitnami/minio:2025.4.22
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+
     env:
       NODE_ENV: test
       PGHOST: localhost
@@ -41,9 +54,23 @@ jobs:
       APP_DB_USER: nfc_app
       # Throwaway credential for a throwaway database inside the job.
       APP_DB_PASSWORD: nfc_app_ci
-      DEV_ACTOR_ENABLED: 'true'
-      DEV_ACTOR_DEFAULT: md
+      SESSION_SECRET: ci-nfc-session-secret-not-for-production-use
+      MFA_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      SEED_USER_PASSWORD: 'NFC-Demo-Seed-2026!'
+      SEED_E2E_SKIP_MUST_CHANGE: 'true'
+      HIBP_ENABLED: 'false'
+      JOBS_ENABLED: 'true'
+      WEB_ORIGIN: http://localhost:3000
       NEXT_PUBLIC_API_URL: http://127.0.0.1:4000
+      S3_ENDPOINT: http://127.0.0.1:9000
+      S3_BUCKET: nfc-documents
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_REGION: us-east-1
+      S3_FORCE_PATH_STYLE: 'true'
+      DOCUMENT_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      SEAL_SIGNING_KEYS: '{"v1":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","v2":"fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"}'
+      SEAL_ACTIVE_KID: v1
 
     steps:
       - uses: actions/checkout@v4
@@ -58,6 +85,16 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+
+      - name: No role-name branches in apps
+        run: node scripts/check-no-role-branch.mjs
+
+      - name: API route guard inventory
+        run: node scripts/check-api-guards.mjs
+
+      - name: Dependency audit (high, non-blocking)
+        run: pnpm audit --audit-level=high
+        continue-on-error: true
 
       - name: Lint
         run: pnpm lint

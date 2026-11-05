@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import type { ActorContext } from '@nfc/db';
 import { computeDiff, type DepartmentView, type RecordStatus } from '@nfc/shared';
-import { assertCan } from '../auth/can';
+import { assertCan, can } from '../auth/can';
+import { ForbiddenError } from '../common/errors/domain-error';
 import { ConflictError, NotFoundError, StaleRecordError } from '../common/errors/domain-error';
 import { UnitOfWork, type TxScope } from '../database/unit-of-work';
 import type {
@@ -66,7 +67,7 @@ export class DepartmentsService {
     entityId: string,
     input: CreateDepartmentInput,
   ): Promise<DepartmentView> {
-    assertCan(actor, 'organization.department.manage', entityId);
+    this.assertManage(actor, entityId);
 
     return this.unitOfWork.write(actor, async (tx) => {
       await this.assertEntityReachable(tx, entityId);
@@ -117,7 +118,7 @@ export class DepartmentsService {
   ): Promise<DepartmentView> {
     return this.unitOfWork.write(actor, async (tx) => {
       const before = await this.lockRow(tx, id, input.rowVersion);
-      assertCan(actor, 'organization.department.manage', before.entity_id);
+      this.assertManage(actor, before.entity_id);
 
       if (input.name.toLowerCase() !== before.name.toLowerCase()) {
         const clash = await tx.client.query(
@@ -176,7 +177,7 @@ export class DepartmentsService {
   ): Promise<DepartmentView> {
     return this.unitOfWork.write(actor, async (tx) => {
       const before = await this.lockRow(tx, id, input.rowVersion);
-      assertCan(actor, 'organization.department.manage', before.entity_id);
+      this.assertManage(actor, before.entity_id);
 
       if (before.status === status) {
         throw new ConflictError(
@@ -208,6 +209,14 @@ export class DepartmentsService {
 
       return toView(after);
     });
+  }
+
+  private assertManage(actor: ActorContext, entityId: string): void {
+    if (can(actor, 'organization.department.manage', entityId) || can(actor, 'hr.org.manage', entityId)) {
+      return;
+    }
+    assertCan(actor, 'organization.department.manage', entityId);
+    throw new ForbiddenError('You are not authorised to manage departments.');
   }
 
   private async assertEntityReachable(tx: TxScope, entityId: string): Promise<void> {

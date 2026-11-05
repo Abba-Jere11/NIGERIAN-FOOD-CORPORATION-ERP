@@ -1,17 +1,14 @@
 import type { ActorContext } from '@nfc/db';
-import { type PermissionKey, roleHasPermission } from '@nfc/shared';
+import { isSystemActorRef } from '@nfc/db';
+import { type PermissionKey } from '@nfc/shared';
 import { ForbiddenError } from '../common/errors/domain-error';
 
 /**
  * The single server-side authorisation check (rule R4).
  *
- * Every endpoint runs through this. Hidden buttons in the interface are
- * cosmetic; this is the enforcement. It denies by default: no role, no
- * permission, or an entity outside the actor's scope all return false.
- *
- * M1 answers from the static role-to-permission map in @nfc/shared because
- * there are no permission tables yet. M2 replaces the lookup with
- * database-backed grants. The signature and every call site stay the same.
+ * Deny by default. Grants come from the session (loaded from `role_permissions`
+ * plus extra scope grants), never from a static role map and never from a
+ * comparison against a role name.
  */
 export function can(
   actor: ActorContext | null | undefined,
@@ -19,14 +16,27 @@ export function can(
   entityId?: string | null,
 ): boolean {
   if (!actor) return false;
-  // System actors run background work; they never serve a request.
-  if (actor.role === null) return false;
-  if (!roleHasPermission(actor.role, permission)) return false;
+  if (isSystemActorRef(actor.ref)) return false;
+  if (!actor.permissions.includes(permission)) return false;
 
   if (entityId !== undefined && entityId !== null) {
-    return actor.isCorporate || actor.entityIds.includes(entityId);
+    if (actor.isCorporate) return true;
+    if (actor.entityIds.includes(entityId)) return true;
+    // Administrator may reach org-management rows without becoming a corporate
+    // business actor. This does not open audit, procurement, finance or inventory.
+    if (actor.isAdmin && isAdminScopedPermission(permission)) return true;
+    return false;
   }
   return true;
+}
+
+function isAdminScopedPermission(permission: PermissionKey): boolean {
+  return (
+    permission.startsWith('admin.') ||
+    permission.startsWith('organization.') ||
+    permission.startsWith('edms.manage_') ||
+    permission === 'org_report.template.manage'
+  );
 }
 
 export function assertCan(
@@ -39,7 +49,12 @@ export function assertCan(
   if (!actor) {
     throw new ForbiddenError('You are not signed in.');
   }
-  if (entityId && actor.role && roleHasPermission(actor.role, permission)) {
+  if (
+    entityId &&
+    actor.permissions.includes(permission) &&
+    !actor.isCorporate &&
+    !actor.entityIds.includes(entityId)
+  ) {
     throw new ForbiddenError('You do not have access to this subsidiary.', {
       permission,
       entityId,
@@ -48,11 +63,12 @@ export function assertCan(
   }
   throw new ForbiddenError('Your role does not permit this action.', {
     permission,
-    role: actor.role,
   });
 }
 
 /** Restricts a list query to the actor's entities. Null means "all entities". */
 export function scopeFilter(actor: ActorContext): string[] | null {
-  return actor.isCorporate ? null : actor.entityIds;
+  if (actor.isCorporate) return null;
+  if (actor.isAdmin) return null;
+  return actor.entityIds;
 }

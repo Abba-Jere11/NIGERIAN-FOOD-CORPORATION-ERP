@@ -75,6 +75,8 @@ describe('Row-Level Security isolates one subsidiary from another (R5)', () => {
       actorRole: 'gm',
       entityIds: [yfz],
       isCorporate: false,
+      isAdmin: false,
+      userId: actor.ref,
       requestId: 'req-session',
     });
   });

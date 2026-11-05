@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import type { ActorContext } from '@nfc/db';
 import { CurrentActor } from '../auth/current-actor.decorator';
-import { RequirePermission } from '../auth/require-permission.decorator';
+import { ActorOnly, RequirePermission } from '../auth/require-permission.decorator';
 import { zodPipe } from '../common/validation/zod-validation.pipe';
 import { DepartmentsService } from './departments.service';
 import { EntitiesService } from './entities.service';
@@ -24,9 +24,9 @@ import {
 /**
  * Entity and department administration.
  *
- * Reading is open to every role but scoped: Row-Level Security limits a GM or
- * Finance Head to their own subsidiary. Writing requires the management
- * permissions, which only the MD holds (A5).
+ * Reading is open to every signed-in role that holds organization.view, but
+ * scoped by Row-Level Security. Writing requires organization.entity.manage,
+ * which the Administrator holds.
  */
 @Controller('api/entities')
 export class EntitiesController {
@@ -98,7 +98,7 @@ export class EntitiesController {
   }
 
   @Post(':id/departments')
-  @RequirePermission('organization.department.manage')
+  @ActorOnly()
   createDepartment(
     @CurrentActor() actor: ActorContext,
     @Param('id', ParseUUIDPipe) id: string,
@@ -113,7 +113,7 @@ export class DepartmentsController {
   constructor(private readonly departments: DepartmentsService) {}
 
   @Patch(':id')
-  @RequirePermission('organization.department.manage')
+  @ActorOnly()
   update(
     @CurrentActor() actor: ActorContext,
     @Param('id', ParseUUIDPipe) id: string,
@@ -123,7 +123,7 @@ export class DepartmentsController {
   }
 
   @Post(':id/deactivate')
-  @RequirePermission('organization.department.manage')
+  @ActorOnly()
   deactivate(
     @CurrentActor() actor: ActorContext,
     @Param('id', ParseUUIDPipe) id: string,
@@ -133,7 +133,7 @@ export class DepartmentsController {
   }
 
   @Post(':id/activate')
-  @RequirePermission('organization.department.manage')
+  @ActorOnly()
   activate(
     @CurrentActor() actor: ActorContext,
     @Param('id', ParseUUIDPipe) id: string,

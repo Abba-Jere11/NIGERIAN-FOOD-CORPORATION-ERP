@@ -28,6 +28,9 @@ export interface ActorOverrides {
   scopeType?: ActorContext['scopeType'];
   entityIds?: string[];
   isCorporate?: boolean;
+  isAdmin?: boolean;
+  permissions?: ActorContext['permissions'];
+  homePath?: string | null;
   requestId?: string;
   ipAddress?: string;
   userAgent?: string;
@@ -43,6 +46,9 @@ export function userActor(overrides: ActorOverrides = {}): ActorContext {
     scopeType: overrides.scopeType ?? 'CORPORATE',
     entityIds: overrides.entityIds ?? [],
     isCorporate: overrides.isCorporate ?? true,
+    isAdmin: overrides.isAdmin ?? false,
+    permissions: overrides.permissions ?? [],
+    homePath: overrides.homePath ?? null,
     requestId: overrides.requestId,
     ipAddress: overrides.ipAddress,
     userAgent: overrides.userAgent,
@@ -58,6 +64,9 @@ export function systemActor(ref = 'system:seed'): ActorContext {
     scopeType: null,
     entityIds: [],
     isCorporate: true,
+    isAdmin: false,
+    permissions: [],
+    homePath: null,
   };
 }
 

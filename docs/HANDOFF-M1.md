@@ -219,33 +219,19 @@ pnpm test:e2e        # Playwright, against the built API and web
 
 ## 7. Acceptance checklist
 
-Recorded at the end of the M1 session. Three lines are **blocked**, not failed: the local PostgreSQL role's password is not yet known, so nothing database-backed has been executed. The tests that prove them are written and typecheck; they have not been run.
+Recorded after the local PostgreSQL password was in place. All seven lines pass except CI, which has never executed because there is still no git remote.
 
 | Line                                                                                          | Result      | Evidence                                                                                                                                                                              |
 | --------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| App boots, CI green, migrations and seed run from scratch.                                    | **partial** | `pnpm lint`, `pnpm build` and `pnpm typecheck` all pass. Migrations and seed have not been executed — see the blocker below. CI has never run; there is no remote.                    |
-| NFC + 4 subsidiaries seeded with correct hierarchy; Nguru Oil Mills is a direct child of NFC. | **blocked** | `packages/db/test/organization.test.ts` asserts the hierarchy, and the A4 constraint and trigger refuse anything deeper. Needs the database to run.                                   |
-| Departments can be added/deactivated per entity; every change writes an audit entry.          | **blocked** | `apps/web/e2e/organization.spec.ts` adds a department, deactivates it with a reason, and then finds both actions in the audit log. Needs the database and both servers.               |
-| `UPDATE`/`DELETE` on `audit_log` fails at database level (tested).                            | **blocked** | `packages/db/test/append-only.test.ts` issues raw SQL as the **table owner** and asserts each statement is refused, including an UPDATE matching zero rows and TRUNCATE.              |
-| Audit entry contains all fields listed in item 5.                                             | **blocked** | `packages/db/test/audit-log.test.ts` writes one entry and asserts all twenty-two stored columns, including the request provenance.                                                    |
-| Every design-system component renders on `/design`; approval tracker shows ✓ ● ○.             | **pass**    | `/design` builds and renders; `apps/web/e2e/design-system.spec.ts` asserts every section and all three tracker marks, in glyphs and in the words given to a screen reader.            |
+| App boots, CI green, migrations and seed run from scratch.                                    | **pass** (CI unrun) | `pnpm db:bootstrap`, `pnpm db:migrate` and `pnpm db:seed` all succeeded. Lint, build and typecheck pass. The CI workflow is committed but has never executed: there is no remote.      |
+| NFC + 4 subsidiaries seeded with correct hierarchy; Nguru Oil Mills is a direct child of NFC. | **pass**    | `packages/db/test/organization.test.ts` (15 tests). Every subsidiary's `parent_entity_id` is the holding company; attaching a subsidiary under YFZ is refused by trigger.              |
+| Departments can be added/deactivated per entity; every change writes an audit entry.          | **pass**    | Playwright `organization.spec.ts`: create a department, deactivate it with a reason, then find both records and the stored reason in `/audit`.                                         |
+| `UPDATE`/`DELETE` on `audit_log` fails at database level (tested).                            | **pass**    | `packages/db/test/append-only.test.ts` (16 tests). Raw SQL `UPDATE`, `DELETE` and `TRUNCATE` as the table owner are refused, including an UPDATE that matches zero rows.                |
+| Audit entry contains all fields listed in item 5.                                             | **pass**    | `packages/db/test/audit-log.test.ts` (15 tests). One written row asserts actor, role, scope, subject, diff, reason, IP, user-agent, session and request id.                             |
+| Every design-system component renders on `/design`; approval tracker shows ✓ ● ○.             | **pass**    | Playwright `design-system.spec.ts` asserts every section and all three tracker marks, in glyphs and in the words given to a screen reader.                                             |
 | Money helper never uses floating point (unit tests for kobo arithmetic and amount-in-words).  | **pass**    | 13 tests in `packages/shared/src/money.test.ts`, including `0.10 + 0.20` being exactly 30 kobo and exactness beyond `Number.MAX_SAFE_INTEGER`. `parseFloat` is banned by a lint rule. |
 
-**99 unit tests pass** across `@nfc/shared` (53), `@nfc/api` (35) and `@nfc/db` (11). Lint, build and typecheck are clean across the workspace.
-
-### The one blocker
-
-`PGPASSWORD` in the root `.env` is still `CHANGEME`. The local PostgreSQL 18 cluster uses `scram-sha-256` for every connection type, so a password is genuinely required; there is no `pgpass.conf` and no trust rule.
-
-Once it is filled in:
-
-```
-pnpm db:bootstrap && pnpm db:migrate && pnpm db:seed
-pnpm test            # unit and integration
-pnpm test:e2e        # Playwright
-```
-
-Until then `pnpm test:integration` fails with a message naming the cause and the variables to fix, rather than skipping quietly. A skipped test that proves R2, R3 and R5 would be worse than a failing one.
+**99 unit tests**, **61 integration tests** and **42 Playwright tests** pass. Lint, build and typecheck are clean.
 
 ---
 

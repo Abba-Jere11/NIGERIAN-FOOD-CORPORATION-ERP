@@ -4,7 +4,12 @@
  */
 export type ActionResult =
   | { status: 'idle' }
-  | { status: 'ok'; message: string }
+  | {
+      status: 'ok';
+      message: string;
+      /** The record's row version after the change, for optimistic concurrency. */
+      rowVersion?: number;
+    }
   | {
       status: 'error';
       message: string;

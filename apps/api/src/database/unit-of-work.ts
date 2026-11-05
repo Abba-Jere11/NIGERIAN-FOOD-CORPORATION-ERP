@@ -6,10 +6,18 @@ import {
   type AuditEntryWritten,
   createDatabaseFromClient,
   type Database,
+  type DomainEventInput,
+  type DomainEventWritten,
   insertAuditEntry,
+  insertDomainEvent,
+  insertTimelineEvent,
+  type SearchIndexInput,
+  type TimelineEventInput,
+  type TimelineEventRow,
+  upsertSearchIndex,
 } from '@nfc/db';
 import type { Pool, PoolClient } from 'pg';
-import { APP_POOL } from './database.module';
+import { APP_POOL } from './tokens';
 
 /**
  * One unit of work: one database transaction, one actor, one audit trail.
@@ -29,6 +37,9 @@ export interface TxScope {
   actor: ActorContext;
   /** Writes an audit entry inside this transaction. */
   audit: (entry: AuditEntryInput) => Promise<AuditEntryWritten>;
+  publish: (event: DomainEventInput) => Promise<DomainEventWritten>;
+  indexSearch: (input: SearchIndexInput) => Promise<void>;
+  appendTimeline: (event: TimelineEventInput) => Promise<TimelineEventRow>;
 }
 
 @Injectable()
@@ -64,6 +75,9 @@ export class UnitOfWork {
         db: createDatabaseFromClient(client),
         actor,
         audit: (entry) => insertAuditEntry(client, actor, entry),
+        publish: (event) => insertDomainEvent(client, actor, event),
+        indexSearch: (input) => upsertSearchIndex(client, input),
+        appendTimeline: (event) => insertTimelineEvent(client, actor, event),
       };
 
       const result = await fn(scope);

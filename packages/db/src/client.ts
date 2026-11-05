@@ -13,21 +13,22 @@ export interface CreatePoolOptions extends Omit<PoolConfig, 'connectionString'> 
 
 export function createPool(options: CreatePoolOptions): Pool {
   const { applicationName = 'nfc-erp', ...config } = options;
-  const pool = new Pool({
+
+  return new Pool({
     ...config,
     application_name: applicationName,
+    // Every session works in UTC; conversion to Africa/Lagos happens in the
+    // presentation layer, never in SQL (A7).
+    //
+    // This is passed as a startup option rather than run as `SET TIME ZONE` on
+    // connect, because the pool does not wait for its own connect listeners: a
+    // query issued immediately after checkout could otherwise reach the server
+    // before the timezone was applied and read timestamps in the server's zone.
+    options: [config.options, '-c timezone=UTC'].filter(Boolean).join(' '),
     max: config.max ?? 10,
     idleTimeoutMillis: config.idleTimeoutMillis ?? 30_000,
     connectionTimeoutMillis: config.connectionTimeoutMillis ?? 10_000,
   });
-
-  // Every session works in UTC. Display conversion to Africa/Lagos happens in
-  // the presentation layer, never in SQL (A7).
-  pool.on('connect', (client) => {
-    void client.query("SET TIME ZONE 'UTC'");
-  });
-
-  return pool;
 }
 
 export function createDatabase(pool: Pool): Database {

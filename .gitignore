@@ -23,6 +23,6 @@ blob-report/
 npm-debug.log*
 pnpm-debug.log*
 
-# OS / editor
+data/
 .DS_Store
 Thumbs.db

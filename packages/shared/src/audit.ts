@@ -68,7 +68,7 @@ export type AuditSubjectType = (typeof AUDIT_SUBJECT_TYPES)[number] | (string & 
  * anonymously (rule R1). `system:seed` is the only actor permitted to write
  * with no user row behind it.
  */
-export const SYSTEM_ACTORS = ['system:seed', 'system:escalation', 'system:outbox'] as const;
+export const SYSTEM_ACTORS = ['system:seed', 'system:escalation', 'system:outbox', 'system:edms'] as const;
 
 export type SystemActor = (typeof SYSTEM_ACTORS)[number];
 

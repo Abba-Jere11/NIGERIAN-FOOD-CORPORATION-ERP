@@ -2,9 +2,8 @@ import { Global, Module, type OnApplicationShutdown } from '@nestjs/common';
 import { appConnection, createPool } from '@nfc/db';
 import { Pool } from 'pg';
 import { getRootLogger } from '../common/logging/logger';
+import { APP_POOL } from './tokens';
 import { UnitOfWork } from './unit-of-work';
-
-export const APP_POOL = 'APP_POOL';
 
 /**
  * The API connects only as the least-privileged `nfc_app` role.
@@ -20,6 +19,7 @@ const poolProvider = {
     const pool = createPool({
       connectionString: connection.connectionString,
       applicationName: 'nfc-erp-api',
+      max: 20,
     });
     pool.on('error', (error) => {
       getRootLogger().error({ err: { message: error.message } }, 'idle database client error');

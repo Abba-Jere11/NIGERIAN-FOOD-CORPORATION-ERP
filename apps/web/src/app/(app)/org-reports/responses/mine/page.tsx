@@ -5,7 +5,7 @@ import { apiFetch } from '@/lib/api';
 import { MinuteTable } from '../../ReportTable';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'My responses — NFC' };
+export const metadata = { title: 'Responses — NFC' };
 
 export default async function MyResponsesPage() {
   const me = await apiFetch<MeView>('/api/me');
@@ -17,7 +17,7 @@ export default async function MyResponsesPage() {
     <>
       <PageHeader
         eyebrow="Official reports"
-        title="My responses"
+        title="Responses"
         description="Responses you have submitted remain on the record even if further action is requested."
       />
       <Surface padded={false}>

@@ -56,8 +56,9 @@ export function eligibilityFromParts(input: {
   };
 }
 
+/** Delivered and paid requests wait for the requesting GM to complete them. */
 export function nextStatusAfterPayment(elig: PaymentEligibility, currentStatus: string): string {
-  if (elig.deliveryComplete && elig.paymentComplete) return 'COMPLETED';
+  if (elig.deliveryComplete && elig.paymentComplete) return 'AWAITING_COMPLETION';
   if (elig.deliveryComplete) {
     if (elig.fundingRoute === 'corporate_allocation' && !elig.funded) return 'FUNDING_PENDING';
     return 'AWAITING_PAYMENT';
@@ -134,9 +135,10 @@ export async function loadPaymentEligibility(tx: TxScope, requestId: string): Pr
   });
 }
 
+/** Delivered quantity on a line: accepted plus quarantined (quarantined stock is in the store pending QC). */
 async function acceptedOnLine(tx: TxScope, requestId: string, lineId: string): Promise<number> {
   const result = await tx.client.query<{ total: string }>(
-    `SELECT coalesce(sum(g.quantity_accepted), 0)::text AS total
+    `SELECT coalesce(sum(g.quantity_accepted + g.quantity_quarantined), 0)::text AS total
        FROM procurement_goods_receipts g
       WHERE g.request_id = $1
         AND coalesce(g.line_id, $2) = $2

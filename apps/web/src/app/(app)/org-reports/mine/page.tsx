@@ -6,7 +6,7 @@ import { apiFetch } from '@/lib/api';
 import { ReportTable } from '../ReportTable';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'My reports — NFC' };
+export const metadata = { title: 'Reports — NFC' };
 
 export default async function MyReportsPage() {
   const me = await apiFetch<MeView>('/api/me');
@@ -18,7 +18,7 @@ export default async function MyReportsPage() {
     <>
       <PageHeader
         eyebrow="Official reports"
-        title="My reports"
+        title="Reports"
         description="Reports you created, including drafts and submitted records."
         actions={
           me.permissions.includes('org_report.create') ? (

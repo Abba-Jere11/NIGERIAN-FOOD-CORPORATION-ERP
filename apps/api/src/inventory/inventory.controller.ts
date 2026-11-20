@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Res } from '@nestjs/common';
 import type { ActorContext } from '@nfc/db';
+import type { Response } from 'express';
 import { ActorOnly, RequirePermission } from '../auth/require-permission.decorator';
 import { CurrentActor } from '../auth/current-actor.decorator';
 import { ValidationFailedError } from '../common/errors/domain-error';
@@ -7,13 +8,16 @@ import { zodPipe } from '../common/validation/zod-validation.pipe';
 import {
   adjustmentSchema,
   cancelProductionSchema,
+  closeProductionSchema,
   cancelSalesSchema,
   completeProductionSchema,
+  createFormulaSchema,
   countLineSchema,
   createCountSchema,
   createItemSchema,
   createProductionSchema,
   createSalesSchema,
+  createLocationSchema,
   createWarehouseSchema,
   dispatchSalesSchema,
   entityQuery,
@@ -24,17 +28,21 @@ import {
   startProductionSchema,
   submitSalesSchema,
   transferSchema,
+  updateBatchSchema,
   updateItemSchema,
   upsertCategorySchema,
   type AdjustmentInput,
   type CancelProductionInput,
+  type CloseProductionInput,
   type CancelSalesInput,
   type CompleteProductionInput,
+  type CreateFormulaInput,
   type CountLineInput,
   type CreateCountInput,
   type CreateItemInput,
   type CreateProductionInput,
   type CreateSalesInput,
+  type CreateLocationInput,
   type CreateWarehouseInput,
   type DispatchSalesInput,
   type InvoiceSalesInput,
@@ -44,9 +52,23 @@ import {
   type StartProductionInput,
   type SubmitSalesInput,
   type TransferInput,
+  type UpdateBatchInput,
   type UpdateItemInput,
   type UpsertCategoryInput,
+  assetDisposeSchema,
+  assetMoveSchema,
+  assetPhotoSchema,
+  qcDecisionSchema,
+  registerAssetSchema,
+  stockReturnSchema,
+  type AssetDisposeInput,
+  type AssetMoveInput,
+  type AssetPhotoInput,
+  type QcDecisionInput,
+  type RegisterAssetInput,
+  type StockReturnInput,
 } from './inventory.dto';
+import { InventoryDeskService } from './desk.service';
 import { InventoryService } from './inventory.service';
 import { ProductionService } from './production.service';
 import { SalesService } from './sales.service';
@@ -55,9 +77,127 @@ import { SalesService } from './sales.service';
 export class InventoryController {
   constructor(
     private readonly inventory: InventoryService,
+    private readonly desk: InventoryDeskService,
     private readonly production: ProductionService,
     private readonly sales: SalesService,
   ) {}
+
+  @Get('api/inventory/settings')
+  @RequirePermission('inventory.view')
+  settings(@CurrentActor() actor: ActorContext) {
+    return this.inventory.settings(actor);
+  }
+
+  @Get('api/inventory/desk')
+  @RequirePermission('inventory.view')
+  deskTiles(@CurrentActor() actor: ActorContext) {
+    return this.desk.tiles(actor);
+  }
+
+  @Get('api/inventory/qc')
+  @RequirePermission('inventory.view')
+  quarantine(@CurrentActor() actor: ActorContext, @Query('entityId') entityId?: string) {
+    return this.desk.quarantine(actor, entityId);
+  }
+
+  @Get('api/inventory/qc/decisions')
+  @RequirePermission('inventory.view')
+  qcDecisions(@CurrentActor() actor: ActorContext, @Query('entityId') entityId?: string) {
+    return this.desk.qcDecisions(actor, entityId);
+  }
+
+  @Post('api/inventory/qc')
+  @RequirePermission('inventory.qc.release')
+  qcDecide(@CurrentActor() actor: ActorContext, @Body(zodPipe(qcDecisionSchema)) body: QcDecisionInput) {
+    return this.desk.qcDecide(actor, body);
+  }
+
+  @Get('api/inventory/returns')
+  @RequirePermission('inventory.view')
+  listReturns(@CurrentActor() actor: ActorContext, @Query('entityId') entityId?: string) {
+    return this.desk.listReturns(actor, entityId);
+  }
+
+  @Get('api/inventory/returns/supplier-eligible')
+  @RequirePermission('inventory.return.supplier')
+  supplierEligible(@CurrentActor() actor: ActorContext, @Query('entityId') entityId?: string) {
+    return this.desk.listSupplierReturnable(actor, entityId);
+  }
+
+  @Post('api/inventory/returns')
+  @ActorOnly()
+  createReturn(@CurrentActor() actor: ActorContext, @Body(zodPipe(stockReturnSchema)) body: StockReturnInput) {
+    return this.desk.createReturn(actor, body);
+  }
+
+  @Get('api/inventory/scan')
+  @RequirePermission('inventory.view')
+  scan(@CurrentActor() actor: ActorContext, @Query('code') code?: string) {
+    if (!code?.trim()) throw new ValidationFailedError('Enter or scan a code.');
+    return this.desk.scan(actor, code);
+  }
+
+  @Get('api/inventory/assets')
+  @RequirePermission('inventory.view')
+  listAssets(@CurrentActor() actor: ActorContext, @Query('entityId') entityId?: string, @Query('q') q?: string) {
+    return this.desk.listAssets(actor, entityId, q);
+  }
+
+  @Post('api/inventory/assets')
+  @RequirePermission('inventory.asset.manage')
+  registerAsset(@CurrentActor() actor: ActorContext, @Body(zodPipe(registerAssetSchema)) body: RegisterAssetInput) {
+    return this.desk.registerAsset(actor, body);
+  }
+
+  @Get('api/inventory/assets/:id')
+  @RequirePermission('inventory.view')
+  getAsset(@CurrentActor() actor: ActorContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.desk.getAsset(actor, id);
+  }
+
+  @Get('api/inventory/assets/:id/photo')
+  @RequirePermission('inventory.view')
+  async assetPhoto(
+    @CurrentActor() actor: ActorContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res() response: Response,
+  ): Promise<void> {
+    const file = await this.desk.assetPhoto(actor, id);
+    response.setHeader('Content-Type', file.mimeType);
+    response.setHeader('Cache-Control', 'private, max-age=300');
+    response.setHeader('Content-Disposition', `inline; filename="${file.filename.replace(/"/g, '')}"`);
+    response.send(file.buffer);
+  }
+
+  @Post('api/inventory/assets/:id/move')
+  @RequirePermission('inventory.asset.manage')
+  moveAsset(
+    @CurrentActor() actor: ActorContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodPipe(assetMoveSchema)) body: AssetMoveInput,
+  ) {
+    return this.desk.moveAsset(actor, id, body);
+  }
+
+  @Post('api/inventory/assets/:id/photo')
+  @RequirePermission('inventory.asset.manage')
+  setAssetPhoto(
+    @CurrentActor() actor: ActorContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodPipe(assetPhotoSchema)) body: AssetPhotoInput,
+  ) {
+    return this.desk.setAssetPhoto(actor, id, body);
+  }
+
+  @Post('api/inventory/assets/:id/dispose')
+  @RequirePermission('inventory.dispose.request')
+  disposeAsset(
+    @CurrentActor() actor: ActorContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodPipe(assetDisposeSchema)) body: AssetDisposeInput,
+  ) {
+    return this.desk.requestAssetDisposal(actor, id, body);
+  }
 
   @Get('api/inventory/context')
   @RequirePermission('inventory.view')
@@ -113,6 +253,36 @@ export class InventoryController {
     return this.inventory.createWarehouse(actor, body);
   }
 
+  @Get('api/inventory/locations')
+  @RequirePermission('inventory.view')
+  locations(@CurrentActor() actor: ActorContext, @Query('entityId') entityId?: string) {
+    return this.inventory.locations(actor, entityId);
+  }
+
+  @Post('api/inventory/locations')
+  @RequirePermission('inventory.config')
+  createLocation(
+    @CurrentActor() actor: ActorContext,
+    @Body(zodPipe(createLocationSchema)) body: CreateLocationInput,
+  ) {
+    return this.inventory.createLocation(actor, body);
+  }
+
+  @Get('api/inventory/batches')
+  @RequirePermission('inventory.view')
+  listBatches(@CurrentActor() actor: ActorContext, @Query('entityId') entityId?: string) {
+    return this.inventory.listBatches(actor, entityId);
+  }
+
+  @Patch('api/inventory/batches/:id')
+  @RequirePermission('inventory.item.manage')
+  updateBatch(
+    @CurrentActor() actor: ActorContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodPipe(updateBatchSchema)) body: UpdateBatchInput,
+  ) {
+    return this.inventory.updateBatch(actor, id, body);
+  }
   @Get('api/inventory/items')
   @RequirePermission('inventory.view')
   listItems(
@@ -214,7 +384,7 @@ export class InventoryController {
   }
 
   @Post('api/inventory/adjustments')
-  @RequirePermission('inventory.adjust.prepare')
+  @ActorOnly()
   prepareAdjustment(
     @CurrentActor() actor: ActorContext,
     @Body(zodPipe(adjustmentSchema)) body: AdjustmentInput,
@@ -273,7 +443,7 @@ export class InventoryController {
   }
 
   @Post('api/inventory/production/:id/start')
-  @RequirePermission('production.create')
+  @RequirePermission('production.complete')
   startProduction(
     @CurrentActor() actor: ActorContext,
     @Param('id', ParseUUIDPipe) id: string,
@@ -300,6 +470,28 @@ export class InventoryController {
     @Body(zodPipe(cancelProductionSchema)) body: CancelProductionInput,
   ) {
     return this.production.cancel(actor, id, body);
+  }
+
+  @Post('api/inventory/production/:id/close')
+  @RequirePermission('production.create')
+  closeProduction(
+    @CurrentActor() actor: ActorContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zodPipe(closeProductionSchema)) body: CloseProductionInput,
+  ) {
+    return this.production.close(actor, id, body);
+  }
+
+  @Get('api/inventory/formulas')
+  @RequirePermission('sales.view')
+  listFormulas(@CurrentActor() actor: ActorContext, @Query('entityId') entityId?: string) {
+    return this.production.listFormulas(actor, entityId);
+  }
+
+  @Post('api/inventory/formulas')
+  @RequirePermission('production.create')
+  createFormula(@CurrentActor() actor: ActorContext, @Body(zodPipe(createFormulaSchema)) body: CreateFormulaInput) {
+    return this.production.createFormula(actor, body);
   }
 
   @Get('api/inventory/sales')

@@ -121,6 +121,36 @@ export async function entityIdFor(pool: Pool, code: string): Promise<string> {
   return id;
 }
 
+/**
+ * Confirms an inventory setting for one test, then puts it back to UNCONFIRMED.
+ * The value is a test fixture only; the seeded settings stay unconfirmed.
+ */
+export async function withConfirmedInventorySetting<T>(
+  owner: Pool,
+  key: 'lane_b_value_threshold_kobo' | 'production_variance_tolerance_bps' | 'expiry_warning_days',
+  value: number,
+  fn: () => Promise<T>,
+): Promise<T> {
+  await owner.query(
+    `UPDATE inventory_settings
+        SET status = 'CONFIRMED', value_numeric = $2, confirmed_by = 'test:fixture', confirmed_at = now(),
+            updated_by = 'test:fixture'
+      WHERE key = $1`,
+    [key, value],
+  );
+  try {
+    return await fn();
+  } finally {
+    await owner.query(
+      `UPDATE inventory_settings
+          SET status = 'UNCONFIRMED', value_numeric = NULL, confirmed_by = NULL, confirmed_at = NULL,
+              updated_by = 'test:fixture'
+        WHERE key = $1`,
+      [key],
+    );
+  }
+}
+
 /** Captures the error PostgreSQL raised, so tests can assert on the code and message. */
 export interface CapturedError {
   message: string;

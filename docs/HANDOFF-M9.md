@@ -1,5 +1,7 @@
 # M9 — Procurement 4 (GM verification, GRN, completion)
 
+> **Superseded in part by `HANDOFF-M13-addendum.md`.** The Procurement Manager records GRNs; the requesting GM completes once delivered and paid. Completion no longer posts inventory or GL for goods and equipment. Read the addendum first.
+
 Companion to `HANDOFF-M1.md` through `HANDOFF-M8.md`.
 
 ## What shipped

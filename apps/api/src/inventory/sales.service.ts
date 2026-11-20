@@ -489,6 +489,7 @@ export class SalesService {
             reversesId: line.movement_id,
             occurredOn: input.occurredOn,
             notes: `Return ${ref}`,
+            stockStatus: 'QUARANTINED',
           });
           await tx.client.query(
             `INSERT INTO sales_return_lines (
@@ -572,6 +573,19 @@ export class SalesService {
         actor.ref,
         id,
       ]);
+      await tx.publish({
+        eventType: 'inventory.qc.pending',
+        subjectType: 'SALES_ORDER',
+        subjectId: id,
+        entityId: current.entity_id,
+        payload: {
+          type: 'inventory.qc.pending',
+          reference: ref,
+          title: `Sales return ${ref}`,
+          summary: 'Returned goods are quarantined until the GM releases or rejects them.',
+          href: '/inventory/qc',
+        },
+      });
     });
     return this.get(actor, id);
   }

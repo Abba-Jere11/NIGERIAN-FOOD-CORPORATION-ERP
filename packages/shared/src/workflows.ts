@@ -50,6 +50,7 @@ export const WORKFLOW_SUBJECT_TYPES = [
   'BILL',
   'INVENTORY_ADJUSTMENT',
   'INVENTORY_TRANSFER',
+  'INVENTORY_ISSUE',
   'PRODUCTION_ORDER',
   'SALES_ORDER',
   'EDMS_DOCUMENT',
@@ -115,6 +116,8 @@ export const INCOME_WORKFLOW_KEY = 'income-v1';
 export const EXPENSE_WORKFLOW_KEY = 'expense-v1';
 export const BILL_WORKFLOW_KEY = 'bill-v1';
 export const INVENTORY_ADJUST_WORKFLOW_KEY = 'inventory-adjust-v1';
+export const INVENTORY_ADJUST_FINANCE_WORKFLOW_KEY = 'inventory-adjust-finance-v1';
+export const INVENTORY_ISSUE_WORKFLOW_KEY = 'inventory-issue-v1';
 export const INVENTORY_TRANSFER_WORKFLOW_KEY = 'inventory-transfer-v1';
 export const PRODUCTION_COMPLETE_WORKFLOW_KEY = 'production-complete-v1';
 export const SALES_ORDER_WORKFLOW_KEY = 'sales-order-v1';

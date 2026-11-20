@@ -18,14 +18,20 @@ import { IntegrityService } from '../../../apps/api/src/finance/integrity.servic
 import { JournalsService } from '../../../apps/api/src/finance/journals.service';
 import { LedgerPostingService } from '../../../apps/api/src/finance/ledger-posting.service';
 import { ReceivablesService } from '../../../apps/api/src/finance/receivables.service';
+import { InventoryDeskService } from '../../../apps/api/src/inventory/desk.service';
 import { InventoryService } from '../../../apps/api/src/inventory/inventory.service';
 import { ProductionService } from '../../../apps/api/src/inventory/production.service';
 import { SalesService } from '../../../apps/api/src/inventory/sales.service';
 import { SealsService } from '../../../apps/api/src/seals/seals.service';
 import { WorkflowsService } from '../../../apps/api/src/workflows/workflows.service';
 import { resetApiEnvCache } from '../../../apps/api/src/config/env';
-import { ForbiddenError, NotFoundError, ValidationFailedError } from '../../../apps/api/src/common/errors/domain-error';
-import { appPool, entityIdFor, ownerPool } from './support';
+import {
+  ConfigurationRequiredError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationFailedError,
+} from '../../../apps/api/src/common/errors/domain-error';
+import { appPool, entityIdFor, ownerPool, withConfirmedInventorySetting } from './support';
 
 function ensureApiEnv(): void {
   process.env.SESSION_SECRET ??= 'test-session-secret-not-for-production-use-32';
@@ -64,6 +70,7 @@ describe('M14 inventory 2 production and sales', () => {
   let dma: string;
   let nfc: string;
   let inventory: InventoryService;
+  let desk: InventoryDeskService;
   let production: ProductionService;
   let sales: SalesService;
   let workflows: WorkflowsService;
@@ -87,6 +94,7 @@ describe('M14 inventory 2 production and sales', () => {
     const journals = new JournalsService(uow, workflows);
     const ledger = new LedgerPostingService(journals);
     inventory = new InventoryService(uow, ledger, workflows);
+    desk = new InventoryDeskService(uow, inventory, undefined, workflows);
     production = new ProductionService(uow, inventory, workflows);
     sales = new SalesService(uow, inventory, ledger, workflows);
     Object.assign(workflows, { inventory, production, sales });
@@ -103,9 +111,9 @@ describe('M14 inventory 2 production and sales', () => {
     await Promise.all([owner.end(), app.end()]);
   });
 
-  it('consumes RM to FG with waste, yield, batch trace and cleared WIP', async () => {
+  it('consumes RM to quarantined FG with waste, yield, batch trace and cleared WIP', async () => {
     const fixture = await stockedPair(100, 50);
-    const planned = await production.create(hauwa, {
+    const planned = await production.create(musa, {
       entityId: yfz,
       warehouseId: fixture.warehouseId,
       finishedItemId: fixture.fg.id,
@@ -126,23 +134,31 @@ describe('M14 inventory 2 production and sales', () => {
       finishedBatchCode: 'FG-A',
       producedOn: '2026-06-15',
     });
-    expect(submitted.status).toBe('AWAITING_APPROVAL');
-    await expect(
-      workflows.act(hauwa, {
-        instanceId: submitted.workflowInstanceId!,
-        action: 'APPROVE',
-        rowVersion: 1,
-      }),
-    ).rejects.toBeInstanceOf(ForbiddenError);
-    const workflow = await workflows.get(halima, submitted.workflowInstanceId!);
-    const posted = await workflows.act(halima, {
-      instanceId: workflow.id,
-      action: 'APPROVE',
-      rowVersion: workflow.rowVersion,
-    });
-    expect(posted.status).toBe('COMPLETED');
+    expect(submitted.status).toBe('COMPLETED');
+    expect(submitted.workflowInstanceId).toBeNull();
+    expect(submitted.varianceBps).toBe(0);
     const done = await production.get(hauwa, planned.id);
     expect(done.status).toBe('COMPLETED');
+
+    const quarantined = await inventory.getItem(hauwa, fixture.fg.id);
+    expect(quarantined.quarantinedQty).toBe(80);
+    expect(quarantined.availableQty).toBe(0);
+    const lot = (await desk.quarantine(musa, yfz)).find((row) => row.productionOrderId === planned.id);
+    expect(lot?.quantity).toBe(80);
+    const release = {
+      entityId: yfz,
+      itemId: lot!.itemId,
+      warehouseId: lot!.warehouseId,
+      batchId: lot!.batchId ?? undefined,
+      productionOrderId: planned.id,
+      decision: 'RELEASE' as const,
+      quantity: 80,
+      reason: 'Batch passed QC',
+      occurredOn: '2026-06-16',
+    };
+    await expect(desk.qcDecide(hauwa, release)).rejects.toBeInstanceOf(ForbiddenError);
+    await desk.qcDecide(musa, release);
+    expect((await inventory.getItem(hauwa, fixture.fg.id)).availableQty).toBe(80);
     expect(done.yieldPct).toBeCloseTo(80 / 80, 5);
     expect(done.batchLinks.some((row) => row.rawBatchCode === 'RM-A' && row.finishedBatchCode === 'FG-A')).toBe(
       true,
@@ -164,9 +180,77 @@ describe('M14 inventory 2 production and sales', () => {
     expect(report.checks.find((row) => row.key === 'inventory')?.status).not.toBe('UNAVAILABLE');
   });
 
+  it('blocks output variance until the tolerance is confirmed, then escalates only beyond it', async () => {
+    const fixture = await stockedPair(100, 50);
+    async function runOrder(batch: string) {
+      const order = await production.create(musa, {
+        entityId: yfz,
+        warehouseId: fixture.warehouseId,
+        finishedItemId: fixture.fg.id,
+        plannedOutputQty: 80,
+        inputs: [{ itemId: fixture.rm.id, warehouseId: fixture.warehouseId, plannedQty: 30, batchCode: 'RM-A' }],
+      });
+      return production.start(hauwa, order.id, {
+        rowVersion: order.rowVersion,
+        occurredOn: '2026-06-15',
+        inputs: [{ itemId: fixture.rm.id, actualQty: 30, batchCode: 'RM-A' }],
+      }).then((started) => ({ started, batch }));
+    }
+    const output = (rowVersion: number, batch: string) => ({
+      rowVersion,
+      actualOutputQty: 70,
+      wasteQty: 0,
+      finishedBatchCode: batch,
+      producedOn: '2026-06-15',
+    });
+
+    const { started: blocked } = await runOrder('FG-V1');
+    await expect(production.submitComplete(hauwa, blocked.id, output(blocked.rowVersion, 'FG-V1'))).rejects.toBeInstanceOf(
+      ConfigurationRequiredError,
+    );
+    expect((await production.get(hauwa, blocked.id)).status).toBe('IN_PROGRESS');
+
+    await withConfirmedInventorySetting(owner, 'production_variance_tolerance_bps', 2_000, async () => {
+      const within = await production.submitComplete(hauwa, blocked.id, output(blocked.rowVersion, 'FG-V1'));
+      expect(within.status).toBe('COMPLETED');
+      expect(within.varianceBps).toBe(1_250);
+    });
+
+    const { started: beyond } = await runOrder('FG-V2');
+    await withConfirmedInventorySetting(owner, 'production_variance_tolerance_bps', 500, async () => {
+      const escalated = await production.submitComplete(hauwa, beyond.id, output(beyond.rowVersion, 'FG-V2'));
+      expect(escalated.status).toBe('AWAITING_APPROVAL');
+      await expect(
+        workflows.act(hauwa, { instanceId: escalated.workflowInstanceId!, action: 'APPROVE', rowVersion: 1 }),
+      ).rejects.toBeInstanceOf(ForbiddenError);
+      const workflow = await workflows.get(halima, escalated.workflowInstanceId!);
+      const approved = await workflows.act(halima, {
+        instanceId: workflow.id,
+        action: 'APPROVE',
+        rowVersion: workflow.rowVersion,
+      });
+      expect(approved.status).toBe('COMPLETED');
+    });
+    const completed = await production.get(hauwa, beyond.id);
+    expect(completed.status).toBe('COMPLETED');
+
+    await expect(production.close(hauwa, completed.id, { rowVersion: completed.rowVersion })).rejects.toBeInstanceOf(
+      ForbiddenError,
+    );
+    await expect(production.close(musa, completed.id, { rowVersion: completed.rowVersion })).rejects.toBeInstanceOf(
+      ValidationFailedError,
+    );
+    const closed = await production.close(musa, completed.id, {
+      rowVersion: completed.rowVersion,
+      note: 'Ten units short: mill stoppage.',
+    });
+    expect(closed.status).toBe('CLOSED');
+    expect(closed.closeNote).toContain('mill stoppage');
+  });
+
   it('reserves stock so a second order cannot oversell, then dispatch and invoice with M11 receipt', async () => {
     const fixture = await stockedPair(20, 100);
-    const first = await sales.create(hauwa, {
+    const first = await sales.create(musa, {
       entityId: yfz,
       customerId: YFZ_CUSTOMER_ID,
       occurredOn: '2026-06-16',
@@ -179,7 +263,7 @@ describe('M14 inventory 2 production and sales', () => {
         },
       ],
     });
-    const submitted = await sales.submit(hauwa, first.id, { rowVersion: first.rowVersion });
+    const submitted = await sales.submit(musa, first.id, { rowVersion: first.rowVersion });
     const workflow = await workflows.get(halima, submitted.workflowInstanceId!);
     await workflows.act(halima, {
       instanceId: workflow.id,
@@ -188,7 +272,7 @@ describe('M14 inventory 2 production and sales', () => {
     });
     const reserved = await sales.get(hauwa, first.id);
     expect(reserved.status).toBe('RESERVED');
-    const second = await sales.create(hauwa, {
+    const second = await sales.create(musa, {
       entityId: yfz,
       customerId: YFZ_CUSTOMER_ID,
       occurredOn: '2026-06-16',
@@ -201,7 +285,7 @@ describe('M14 inventory 2 production and sales', () => {
         },
       ],
     });
-    const secondSub = await sales.submit(hauwa, second.id, { rowVersion: second.rowVersion });
+    const secondSub = await sales.submit(musa, second.id, { rowVersion: second.rowVersion });
     const secondWf = await workflows.get(halima, secondSub.workflowInstanceId!);
     await expect(
       workflows.act(halima, {
@@ -255,7 +339,7 @@ describe('M14 inventory 2 production and sales', () => {
 
   it('keeps originals on cancel and return, and isolates DMA from the YFZ GM', async () => {
     const fixture = await stockedPair(10, 80);
-    const draft = await sales.create(hauwa, {
+    const draft = await sales.create(musa, {
       entityId: yfz,
       customerId: YFZ_CUSTOMER_ID,
       occurredOn: '2026-06-19',
@@ -263,18 +347,18 @@ describe('M14 inventory 2 production and sales', () => {
         { itemId: fixture.fg.id, warehouseId: fixture.warehouseId, quantity: 4, unitPriceKobo: 500 },
       ],
     });
-    const submitted = await sales.submit(hauwa, draft.id, { rowVersion: draft.rowVersion });
+    const submitted = await sales.submit(musa, draft.id, { rowVersion: draft.rowVersion });
     const wf = await workflows.get(halima, submitted.workflowInstanceId!);
     await workflows.act(halima, { instanceId: wf.id, action: 'APPROVE', rowVersion: wf.rowVersion });
     const reserved = await sales.get(hauwa, draft.id);
-    const cancelled = await sales.cancel(hauwa, draft.id, {
+    const cancelled = await sales.cancel(musa, draft.id, {
       rowVersion: reserved.rowVersion,
       reason: 'Customer withdrew',
     });
     expect(cancelled.status).toBe('CANCELLED');
     expect(cancelled.referenceNumber).toBe(draft.referenceNumber);
 
-    const sold = await sales.create(hauwa, {
+    const sold = await sales.create(musa, {
       entityId: yfz,
       customerId: YFZ_CUSTOMER_ID,
       occurredOn: '2026-06-20',
@@ -282,7 +366,7 @@ describe('M14 inventory 2 production and sales', () => {
         { itemId: fixture.fg.id, warehouseId: fixture.warehouseId, quantity: 3, unitPriceKobo: 500 },
       ],
     });
-    const soldSub = await sales.submit(hauwa, sold.id, { rowVersion: sold.rowVersion });
+    const soldSub = await sales.submit(musa, sold.id, { rowVersion: sold.rowVersion });
     const soldWf = await workflows.get(halima, soldSub.workflowInstanceId!);
     await workflows.act(halima, { instanceId: soldWf.id, action: 'APPROVE', rowVersion: soldWf.rowVersion });
     const ready = await sales.get(hauwa, sold.id);
@@ -307,6 +391,12 @@ describe('M14 inventory 2 production and sales', () => {
       [sold.id],
     );
     expect(Number(reversing.rows[0]?.n ?? 0)).toBeGreaterThan(0);
+    const returnStatus = await owner.query<{ stock_status: string }>(
+      `SELECT DISTINCT stock_status FROM stock_movements WHERE source = 'SALES_RETURN' AND quantity_in > 0
+          AND source_id IN (SELECT id FROM sales_returns WHERE sales_order_id = $1)`,
+      [sold.id],
+    );
+    expect(returnStatus.rows.map((row) => row.stock_status)).toEqual(['QUARANTINED']);
 
     await expect(sales.list(musa, dma)).rejects.toBeInstanceOf(ForbiddenError);
     await expect(production.list(musa, dma)).rejects.toBeInstanceOf(ForbiddenError);
@@ -316,10 +406,10 @@ describe('M14 inventory 2 production and sales', () => {
     }
   });
 
-  it('blocks admin and GM from creating production or dispatching, and blocks self-approval', async () => {
+  it('blocks admin and the Procurement Manager from creating production, the GM from dispatching', async () => {
     const fixture = await stockedPair(8, 40);
     await expect(
-      production.create(musa, {
+      production.create(hauwa, {
         entityId: yfz,
         warehouseId: fixture.warehouseId,
         finishedItemId: fixture.fg.id,
@@ -336,7 +426,7 @@ describe('M14 inventory 2 production and sales', () => {
         inputs: [{ itemId: fixture.rm.id, plannedQty: 8 }],
       }),
     ).rejects.toBeInstanceOf(ForbiddenError);
-    const order = await sales.create(hauwa, {
+    const order = await sales.create(musa, {
       entityId: yfz,
       customerId: YFZ_CUSTOMER_ID,
       occurredOn: '2026-06-23',
@@ -344,7 +434,7 @@ describe('M14 inventory 2 production and sales', () => {
         { itemId: fixture.fg.id, warehouseId: fixture.warehouseId, quantity: 2, unitPriceKobo: 300 },
       ],
     });
-    const submitted = await sales.submit(hauwa, order.id, { rowVersion: order.rowVersion });
+    const submitted = await sales.submit(musa, order.id, { rowVersion: order.rowVersion });
     await expect(
       workflows.act(hauwa, {
         instanceId: submitted.workflowInstanceId!,

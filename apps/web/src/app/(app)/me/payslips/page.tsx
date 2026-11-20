@@ -4,7 +4,7 @@ import { PageHeader, Surface, SurfaceHeader } from '@/components/ui/Surface';
 import { apiFetch } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'My payslips — NFC' };
+export const metadata = { title: 'Payslips — NFC' };
 
 export default async function MePayslipsPage() {
   const me = await apiFetch<MeView>('/api/me');
@@ -15,7 +15,7 @@ export default async function MePayslipsPage() {
 
   return (
     <>
-      <PageHeader eyebrow="My workspace" title="Payslips" description="Payslips issued for your employee record." />
+      <PageHeader eyebrow="Workspace" title="Payslips" description="Payslips issued for your employee record." />
       <Surface padded={false}>
         <SurfaceHeader title="Issued payslips" />
         <ul className="divide-y divide-ink-100 text-[13px]">

@@ -36,7 +36,7 @@ export default async function ProcurementPage({
     <>
       <PageHeader
         eyebrow="Procurement"
-        title="My Procurement"
+        title="Procurement"
         description="Structured requests. The memo is generated from the fields; there is no free-text memo."
         actions={
           canCreate ? (

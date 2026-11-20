@@ -15,7 +15,7 @@ export default async function ReliefPage() {
   return (
     <>
       <PageHeader
-        eyebrow="My workspace"
+        eyebrow="Workspace"
         title="Relief requests"
         description="Accept or decline these from Approvals. Declining rejects the leave."
       />

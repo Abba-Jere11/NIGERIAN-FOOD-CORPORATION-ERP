@@ -7,7 +7,7 @@ import { ActionForm } from '../ActionForm';
 import { updateProfile } from '../actions';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'My profile — NFC' };
+export const metadata = { title: 'Profile — NFC' };
 
 export default async function MeProfilePage() {
   const me = await apiFetch<MeView>('/api/me');

@@ -30,7 +30,7 @@ export default async function CorporateHomePage() {
           danger={summary.pendingTotal > 0}
         />
         <HomeKpiCard
-          label="My role dashboard"
+          label="Role dashboard"
           value="Open"
           href={summary.roleDashboardPath}
           hint="Queues and tiles for your role"

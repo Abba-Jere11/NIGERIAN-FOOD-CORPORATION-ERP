@@ -183,6 +183,9 @@ describe('global dual-approval scenario (M19)', () => {
       documents: [{ documentId: note.id, kind: 'delivery_note' }],
     });
     expect(received.receipts.length).toBeGreaterThan(0);
+    expect(received.status).toBe('AWAITING_COMPLETION');
+    const confirmed = await delivery.complete(musa, paid.id);
+    expect(confirmed.status).toBe('COMPLETED');
     const wf = await workflows.get(musa, received.workflowInstanceId!);
     expect(wf.seals.every((seal) => seal.verification === 'VALID')).toBe(true);
     const client = await app.connect();

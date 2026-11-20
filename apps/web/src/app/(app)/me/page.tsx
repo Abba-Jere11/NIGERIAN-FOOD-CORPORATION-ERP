@@ -5,7 +5,7 @@ import { PageHeader, Surface } from '@/components/ui/Surface';
 import { apiFetch } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'My workspace — NFC' };
+export const metadata = { title: 'Workspace — NFC' };
 
 export default async function MeHomePage() {
   const me = await apiFetch<MeView>('/api/me');
@@ -17,7 +17,7 @@ export default async function MeHomePage() {
   return (
     <>
       <PageHeader
-        eyebrow="My workspace"
+        eyebrow="Workspace"
         title={me.name}
         description={
           summary.linked

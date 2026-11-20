@@ -135,7 +135,7 @@ export default async function MdHomePage() {
       <PendingActionsPanel />
 
       <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
-        <HomeKpiCard label="Pending my final approval" value={myApprovals.length} href="/workflows" />
+        <HomeKpiCard label="Pending final approval" value={myApprovals.length} href="/workflows" />
         <HomeKpiCard
           label="Major transactions"
           value={majorRows.length}
@@ -184,7 +184,7 @@ export default async function MdHomePage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <Surface padded={false}>
-            <SurfaceHeader title="My pending approvals" description="Requisitions at your final stage." />
+            <SurfaceHeader title="Pending approvals" description="Requisitions at your final stage." />
             <HomeQueueTable
               rows={myApprovals.map((row) => ({
                 id: row.id,

@@ -1,5 +1,7 @@
 # M13 — Inventory 1
 
+> **Superseded in part by `HANDOFF-M13-addendum.md`.** Expected stock, GRN posting, completion, adjustments, inter-entity transfers and approval roles changed under the inventory addendum. Read the addendum first.
+
 Companion to `HANDOFF-M1.md` through `HANDOFF-M12.md`.
 
 ## What shipped

@@ -165,6 +165,22 @@ describe('the default grant catalog', () => {
     expect(defaultGrantIncludes('gm', 'requisition.approve.need')).toBe(false);
   });
 
+  it('splits GRN, completion and QC between the Procurement Manager and the GM', () => {
+    expect(defaultGrantIncludes('gm', 'procurement.complete')).toBe(true);
+    expect(defaultGrantIncludes('inventory_officer', 'procurement.complete')).toBe(false);
+    expect(defaultGrantIncludes('gm', 'inventory.qc.release')).toBe(true);
+    expect(defaultGrantIncludes('inventory_officer', 'inventory.qc.release')).toBe(false);
+    expect(defaultGrantIncludes('gm', 'inventory.issue')).toBe(false);
+    expect(defaultGrantIncludes('gm', 'inventory.adjust.prepare')).toBe(false);
+    expect(defaultGrantIncludes('gm', 'inventory.adjust.approve')).toBe(false);
+    expect(defaultGrantIncludes('gm', 'production.create')).toBe(true);
+    expect(defaultGrantIncludes('inventory_officer', 'production.create')).toBe(false);
+    expect(defaultGrantIncludes('inventory_officer', 'production.complete')).toBe(true);
+    expect(defaultGrantIncludes('administrator', 'procurement.complete')).toBe(false);
+    expect(defaultGrantIncludes('administrator', 'inventory.qc.release')).toBe(false);
+    expect(defaultGrantIncludes('administrator', 'procurement.grn.record')).toBe(false);
+  });
+
   it('lets only the MD correct a locked second-batch date', () => {
     expect(defaultGrantIncludes('md', 'procurement.shortage.override')).toBe(true);
     for (const role of ROLE_KEYS) {

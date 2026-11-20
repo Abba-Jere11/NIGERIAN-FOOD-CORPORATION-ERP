@@ -15,7 +15,7 @@ export default async function NoticesPage() {
 
   return (
     <>
-      <PageHeader eyebrow="My workspace" title="Notice board" />
+      <PageHeader eyebrow="Workspace" title="Notice board" />
       <div className="space-y-3">
         {notices.length === 0 ? <p className="text-[13px] text-ink-500">No notices right now.</p> : null}
         {notices.map((notice) => (

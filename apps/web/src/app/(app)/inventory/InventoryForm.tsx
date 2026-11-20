@@ -28,11 +28,11 @@ export function InventoryForm({
   return (
     <form action={formAction} className="space-y-3 px-4 py-4">
       {entityId ? <input type="hidden" name="entityId" value={entityId} /> : null}
-      {fields.map((field) =>
+      {fields.map((field, index) =>
         field.type === 'hidden' ? (
-          <input key={field.name} type="hidden" name={field.name} value={field.defaultValue ?? ''} />
+          <input key={`${field.name}-${index}`} type="hidden" name={field.name} value={field.defaultValue ?? ''} />
         ) : (
-          <label key={field.name} className="block text-[13px]">
+          <label key={`${field.name}-${index}`} className="block text-[13px]">
             <span className="font-semibold text-ink-700">{field.label}</span>
             {field.options ? (
               <select

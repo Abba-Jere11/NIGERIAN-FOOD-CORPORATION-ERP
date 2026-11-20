@@ -53,6 +53,10 @@ export const procurementLineInputSchema = z.object({
   unitId: z.string().uuid().nullable().optional(),
   unitPriceKobo: z.number().int().positive().nullable().optional(),
   budgetLineId: z.string().uuid().nullable().optional(),
+  /** Stock Register item for a stock/asset line. */
+  inventoryItemId: z.string().uuid().nullable().optional(),
+  /** Create a Stock Register item from this line when none exists yet. */
+  createStockItem: z.boolean().optional(),
 });
 
 export const updateProcurementSchema = z.object({
@@ -310,6 +314,9 @@ export const recordReceiptSchema = z.object({
   quantityReceived: z.coerce.number().int().nonnegative(),
   quantityAccepted: z.coerce.number().int().nonnegative(),
   quantityRejected: z.coerce.number().int().nonnegative().optional(),
+  quantityQuarantined: z.coerce.number().int().nonnegative().optional().default(0),
+  quarantineReason: optionalText.pipe(z.string().max(4000).optional()),
+  locationId: optionalUuid,
   rejectReason: optionalText.pipe(z.string().max(4000).optional()),
   conditionNotes: optionalText.pipe(z.string().max(4000).optional()),
   secondBatchDueOn: optionalDate,
@@ -325,6 +332,10 @@ export const deliveryItemSchema = z.object({
   quantityReceived: z.coerce.number().int().nonnegative(),
   quantityAccepted: z.coerce.number().int().nonnegative(),
   quantityRejected: z.coerce.number().int().nonnegative().optional().default(0),
+  quantityQuarantined: z.coerce.number().int().nonnegative().optional().default(0),
+  quarantineReason: optionalText.pipe(z.string().max(4000).optional()),
+  warehouseId: optionalUuid,
+  locationId: optionalUuid,
   rejectReason: optionalText.pipe(z.string().max(4000).optional()),
   conditionNotes: optionalText.pipe(z.string().max(4000).optional()),
   secondBatchDueOn: optionalDate,

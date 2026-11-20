@@ -4,7 +4,7 @@ import { PageHeader, Surface, SurfaceHeader } from '@/components/ui/Surface';
 import { apiFetch } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'My attendance — NFC' };
+export const metadata = { title: 'Attendance — NFC' };
 
 export default async function MeAttendancePage() {
   const me = await apiFetch<MeView>('/api/me');
@@ -13,7 +13,7 @@ export default async function MeAttendancePage() {
 
   return (
     <>
-      <PageHeader eyebrow="My workspace" title="Attendance" description="The last 90 days on your record." />
+      <PageHeader eyebrow="Workspace" title="Attendance" description="The last 90 days on your record." />
       <Surface padded={false}>
         <SurfaceHeader title="Records" />
         <ul className="divide-y divide-ink-100 text-[13px]">

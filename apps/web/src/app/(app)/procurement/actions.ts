@@ -36,6 +36,8 @@ function parseLineFields(formData: FormData): Array<{
   unitId: string | null;
   unitPriceKobo: number | null;
   budgetLineId: string | null;
+  inventoryItemId?: string | null;
+  createStockItem?: boolean;
 }> {
   const lines: Array<{
     description: string | null;
@@ -44,6 +46,8 @@ function parseLineFields(formData: FormData): Array<{
     unitId: string | null;
     unitPriceKobo: number | null;
     budgetLineId: string | null;
+    inventoryItemId?: string | null;
+    createStockItem?: boolean;
   }> = [];
   for (let index = 0; index < 40; index += 1) {
     const prefix = `lines[${index}]`;
@@ -61,9 +65,16 @@ function parseLineFields(formData: FormData): Array<{
       unitId: optionalText(formData, `${prefix}.unitId`) ?? null,
       unitPriceKobo: optionalNumber(formData, `${prefix}.unitPriceKobo`) ?? null,
       budgetLineId: optionalText(formData, `${prefix}.budgetLineId`) ?? null,
+      ...itemMapping(optionalText(formData, `${prefix}.inventoryItemId`)),
     });
   }
   return lines;
+}
+
+function itemMapping(value: string | undefined): { inventoryItemId?: string | null; createStockItem?: boolean } {
+  if (value === undefined) return {};
+  if (value === '__create__') return { createStockItem: true };
+  return { inventoryItemId: value };
 }
 
 function toActionResult(error: unknown): ActionResult {
@@ -480,7 +491,8 @@ export async function recordDeliveryAction(
         const quantityReceived = quantity('quantityReceived');
         const quantityAccepted = quantity('quantityAccepted');
         const quantityRejected = quantity('quantityRejected');
-        if (quantityReceived === 0 && quantityAccepted === 0 && quantityRejected === 0) {
+        const quantityQuarantined = quantity('quantityQuarantined');
+        if (quantityReceived === 0 && quantityAccepted === 0 && quantityRejected === 0 && quantityQuarantined === 0) {
           return null;
         }
         return {
@@ -488,6 +500,8 @@ export async function recordDeliveryAction(
           quantityReceived,
           quantityAccepted,
           quantityRejected,
+          quantityQuarantined,
+          ...(field('quarantineReason') ? { quarantineReason: field('quarantineReason') } : {}),
           ...(field('rejectReason') ? { rejectReason: field('rejectReason') } : {}),
           ...(field('conditionNotes') ? { conditionNotes: field('conditionNotes') } : {}),
           ...(field('secondBatchDueOn') ? { secondBatchDueOn: field('secondBatchDueOn') } : {}),

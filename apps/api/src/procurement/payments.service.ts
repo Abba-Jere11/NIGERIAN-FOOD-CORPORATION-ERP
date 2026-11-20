@@ -391,13 +391,12 @@ export class PaymentsService {
           narration: `Procurement ${row.reference_number}`,
         });
       }
-      const requestCompleted = nextStatus === 'COMPLETED';
       await this.workflows.completePaymentInTx(tx, actor, {
         requestId: row.id,
         paymentRef: reference,
         snapshot: row.memo_json ?? { reference: row.reference_number, amountKobo },
         paymentSettled: afterPay.paymentComplete,
-        requestCompleted,
+        requestCompleted: false,
       });
       const outstandingKobo = Math.max(afterPay.obligationKobo - afterPay.paidKobo, 0);
       // Pay-before-delivery: ask the Procurement Manager to verify each item; the GM gets a copy.
@@ -464,14 +463,15 @@ export class PaymentsService {
           permissionKey: 'procurement.view',
         });
       }
-      if (nextStatus === 'COMPLETED' && this.delivery) {
-        await this.delivery.completeInTx(tx, actor, row.id, { skipPermission: true });
-      } else if (nextStatus !== row.status) {
+      if (nextStatus !== row.status) {
         await tx.client.query(`UPDATE procurement_requests SET status = $1, updated_by = $2 WHERE id = $3`, [
           nextStatus,
           actor.ref,
           row.id,
         ]);
+      }
+      if (nextStatus === 'AWAITING_COMPLETION' && this.delivery) {
+        await this.delivery.notifyAwaitingCompletionInTx(tx, row.id);
       }
       return this.procurement.getInTx(tx, actor, row.id);
     });

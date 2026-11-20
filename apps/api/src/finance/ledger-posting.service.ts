@@ -182,20 +182,40 @@ export class LedgerPostingService {
       `SELECT gl_account_id, entity_id FROM entity_bank_accounts WHERE id = $1`,
       [input.payingAccountId],
     );
-    if (!bank.rows[0]?.gl_account_id) {
+    const bankAccountId = bank.rows[0]?.gl_account_id;
+    if (!bankAccountId) {
       throw new ValidationFailedError('The paying account is not mapped to the ledger.');
     }
-    const journal = await this.postTwoSided(tx, actor, {
+    // Goods received before payment were credited to trade payables at GRN; settle that first.
+    const payable = Math.min(
+      input.amountKobo,
+      Math.max(await this.receiptPayableOutstanding(tx, input.entityId, input.requestId), 0),
+    );
+    const prepaid = input.amountKobo - payable;
+    const dims = { procurementRequestId: input.requestId, vendorId: input.vendorId };
+    const debitLines = [
+      ...(payable > 0
+        ? [
+            {
+              accountId: await this.accountIdByCode(tx, input.entityId, '2110'),
+              debitKobo: payable,
+              creditKobo: 0,
+              ...dims,
+            },
+          ]
+        : []),
+      ...(prepaid > 0 ? [{ accountId: prepay, debitKobo: prepaid, creditKobo: 0, ...dims }] : []),
+    ];
+    const journal = await this.journals.postSystemInTx(tx, actor, {
       entityId: input.entityId,
-      occurredOn: input.occurredOn,
+      fiscalPeriodId: await this.openPeriodId(tx, input.entityId, input.occurredOn),
       narration: input.narration,
       idempotencyKey: `pay:${input.paymentId}`,
       source: 'PROCUREMENT_PAYMENT',
-      debitAccountId: prepay,
-      creditAccountId: bank.rows[0].gl_account_id,
-      amountKobo: input.amountKobo,
-      procurementRequestId: input.requestId,
-      vendorId: input.vendorId,
+      lines: [
+        ...debitLines,
+        { accountId: bankAccountId, debitKobo: 0, creditKobo: input.amountKobo, ...dims },
+      ],
     });
     await this.insertBankTransaction(tx, actor, {
       accountId: input.payingAccountId,
@@ -265,12 +285,14 @@ export class LedgerPostingService {
       occurredOn: string;
       narration: string;
       budgetLineId?: string | null;
+      /** Distinguishes one reclass per service category on a mixed request. */
+      keySuffix?: string;
     },
   ): Promise<JournalView | null> {
-    const existing = await tx.client.query<{ id: string }>(
-      `SELECT id FROM journals WHERE idempotency_key = $1`,
-      [`reclass:${input.requestId}`],
-    );
+    const idempotencyKey = `reclass:${input.requestId}${input.keySuffix ? `:${input.keySuffix}` : ''}`;
+    const existing = await tx.client.query<{ id: string }>(`SELECT id FROM journals WHERE idempotency_key = $1`, [
+      idempotencyKey,
+    ]);
     if (existing.rows[0]) return this.journals.getInTx(tx, existing.rows[0].id);
     const rule = await tx.client.query<{ prepayment_account_code: string; completion_account_code: string }>(
       `SELECT prepayment_account_code, completion_account_code
@@ -279,28 +301,14 @@ export class LedgerPostingService {
     );
     const prepayCode = rule.rows[0]?.prepayment_account_code ?? '1300';
     const completeCode = rule.rows[0]?.completion_account_code ?? '5220';
-    let amountKobo = input.amountKobo;
-    if (input.categoryKey === 'goods' || input.categoryKey === 'equipment') {
-      const posted = await tx.client.query<{ n: string }>(
-        `SELECT coalesce(sum(l.debit_kobo), 0)::text AS n
-           FROM journal_lines l
-           JOIN journals j ON j.id = l.journal_id
-          WHERE j.status = 'POSTED'
-            AND j.source = 'INVENTORY_RECEIPT'
-            AND l.procurement_request_id = $1
-            AND l.debit_kobo > 0`,
-        [input.requestId],
-      );
-      amountKobo = Math.max(input.amountKobo - Number(posted.rows[0]?.n ?? 0), 0);
-      if (amountKobo <= 0) return null;
-    }
+    const amountKobo = input.amountKobo;
     const debit = await this.accountIdByCode(tx, input.entityId, completeCode);
     const credit = await this.accountIdByCode(tx, input.entityId, prepayCode);
     const journal = await this.postTwoSided(tx, actor, {
       entityId: input.entityId,
       occurredOn: input.occurredOn,
       narration: input.narration,
-      idempotencyKey: `reclass:${input.requestId}`,
+      idempotencyKey,
       source: 'PROCUREMENT_RECLASS',
       debitAccountId: debit,
       creditAccountId: credit,
@@ -316,6 +324,156 @@ export class LedgerPostingService {
       amountKobo,
     });
     return journal;
+  }
+
+  /** Net debit on the prepayment account for this procurement: paid and not yet received or recovered. */
+  async procurementPrepaidBalance(tx: TxScope, entityId: string, requestId: string): Promise<number> {
+    const result = await tx.client.query<{ n: string }>(
+      `SELECT coalesce(sum(l.debit_kobo - l.credit_kobo), 0)::text AS n
+         FROM journal_lines l
+         JOIN journals j ON j.id = l.journal_id
+         JOIN accounts a ON a.id = l.account_id
+        WHERE j.entity_id = $1 AND j.status IN ('POSTED', 'REVERSED')
+          AND l.procurement_request_id = $2 AND a.code = '1300'`,
+      [entityId, requestId],
+    );
+    return Number(result.rows[0]?.n ?? 0);
+  }
+
+  /** Trade payable raised by GRNs on this procurement and not yet settled by a payment. */
+  async receiptPayableOutstanding(tx: TxScope, entityId: string, requestId: string): Promise<number> {
+    const result = await tx.client.query<{ n: string }>(
+      `SELECT coalesce(sum(l.credit_kobo - l.debit_kobo), 0)::text AS n
+         FROM journal_lines l
+         JOIN journals j ON j.id = l.journal_id
+         JOIN accounts a ON a.id = l.account_id
+        WHERE j.entity_id = $1 AND j.status IN ('POSTED', 'REVERSED')
+          AND l.procurement_request_id = $2 AND a.code = '2110'
+          AND (j.idempotency_key LIKE 'inv-grn%' OR j.idempotency_key LIKE 'pay:%' OR j.idempotency_key LIKE 'pay-rev:%')`,
+      [entityId, requestId],
+    );
+    return Number(result.rows[0]?.n ?? 0);
+  }
+
+  /**
+   * Accepted and quarantined GRN quantity at the approved unit price:
+   * Dr inventory (1400 goods / 1500 equipment), Cr prepayment up to what was paid
+   * before delivery, Cr trade payables for the rest. The budget ACTUAL moves here.
+   */
+  async postInventoryReceipt(
+    tx: TxScope,
+    actor: ActorContext,
+    input: {
+      grnId: string;
+      entityId: string;
+      requestId: string;
+      vendorId: string | null;
+      debitAccountCode: string;
+      amountKobo: number;
+      occurredOn: string;
+      narration: string;
+      movementId: string | null;
+      budgetLineId?: string | null;
+    },
+  ): Promise<JournalView | null> {
+    const key = `inv-grn:${input.grnId}`;
+    const existing = await tx.client.query<{ id: string }>(`SELECT id FROM journals WHERE idempotency_key = $1`, [key]);
+    if (existing.rows[0]) return this.journals.getInTx(tx, existing.rows[0].id);
+    if (input.amountKobo <= 0) return null;
+    const prepaid = Math.max(await this.procurementPrepaidBalance(tx, input.entityId, input.requestId), 0);
+    const fromPrepaid = Math.min(input.amountKobo, prepaid);
+    const toPayable = input.amountKobo - fromPrepaid;
+    const dims = {
+      procurementRequestId: input.requestId,
+      vendorId: input.vendorId,
+      inventoryMovementId: input.movementId,
+    };
+    const lines = [
+      {
+        accountId: await this.accountIdByCode(tx, input.entityId, input.debitAccountCode),
+        debitKobo: input.amountKobo,
+        creditKobo: 0,
+        ...dims,
+      },
+      ...(fromPrepaid > 0
+        ? [{ accountId: await this.accountIdByCode(tx, input.entityId, '1300'), debitKobo: 0, creditKobo: fromPrepaid, ...dims }]
+        : []),
+      ...(toPayable > 0
+        ? [{ accountId: await this.accountIdByCode(tx, input.entityId, '2110'), debitKobo: 0, creditKobo: toPayable, ...dims }]
+        : []),
+    ];
+    const journal = await this.journals.postSystemInTx(tx, actor, {
+      entityId: input.entityId,
+      fiscalPeriodId: await this.openPeriodId(tx, input.entityId, input.occurredOn),
+      narration: input.narration,
+      idempotencyKey: key,
+      source: 'INVENTORY_RECEIPT',
+      lines,
+    });
+    await this.writeBudgetEvent(tx, actor, {
+      requestId: input.requestId,
+      entityId: input.entityId,
+      budgetLineId: input.budgetLineId ?? null,
+      action: 'ACTUAL',
+      amountKobo: input.amountKobo,
+    });
+    return journal;
+  }
+
+  /** A superseded GRN: mirror its receipt journal and its budget ACTUAL. */
+  async reverseInventoryReceipt(
+    tx: TxScope,
+    actor: ActorContext,
+    input: { grnId: string; entityId: string; requestId: string; budgetLineId?: string | null; reason: string },
+  ): Promise<void> {
+    const original = await tx.client.query<{ id: string; fiscal_period_id: string }>(
+      `SELECT id, fiscal_period_id FROM journals WHERE idempotency_key = $1 AND status = 'POSTED'`,
+      [`inv-grn:${input.grnId}`],
+    );
+    const journal = original.rows[0];
+    if (!journal) return;
+    const lines = await tx.client.query<{
+      account_id: string;
+      debit_kobo: string;
+      credit_kobo: string;
+      procurement_request_id: string | null;
+      vendor_id: string | null;
+      inventory_movement_id: string | null;
+    }>(
+      `SELECT account_id, debit_kobo::text, credit_kobo::text, procurement_request_id, vendor_id, inventory_movement_id
+         FROM journal_lines WHERE journal_id = $1 ORDER BY line_number`,
+      [journal.id],
+    );
+    const amount = lines.rows.reduce((sum, line) => sum + Number(line.debit_kobo), 0);
+    await this.journals.postSystemInTx(tx, actor, {
+      entityId: input.entityId,
+      fiscalPeriodId: journal.fiscal_period_id,
+      narration: `Reversal of superseded receipt. ${input.reason}`,
+      idempotencyKey: `inv-grn-rev:${input.grnId}`,
+      source: 'REVERSAL',
+      reversesJournalId: journal.id,
+      lines: lines.rows.map((line) => ({
+        accountId: line.account_id,
+        debitKobo: Number(line.credit_kobo),
+        creditKobo: Number(line.debit_kobo),
+        procurementRequestId: line.procurement_request_id,
+        vendorId: line.vendor_id,
+        inventoryMovementId: line.inventory_movement_id,
+      })),
+    });
+    await tx.client.query(
+      `UPDATE journals SET status = 'REVERSED', updated_by = $1 WHERE id = $2 AND status = 'POSTED'`,
+      [actor.ref, journal.id],
+    );
+    if (amount > 0) {
+      await this.writeBudgetEvent(tx, actor, {
+        requestId: input.requestId,
+        entityId: input.entityId,
+        budgetLineId: input.budgetLineId ?? null,
+        action: 'REVERSE_ACTUAL',
+        amountKobo: amount,
+      });
+    }
   }
 
   async reverseProcurementPayment(

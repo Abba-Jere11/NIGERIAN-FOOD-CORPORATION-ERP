@@ -1,6 +1,8 @@
+import Link from 'next/link';
 import type {
   InventoryContextView,
   InventoryItemListView,
+  ProductionFormulaView,
   WarehouseView,
 } from '@nfc/shared';
 import { PageHeader, Surface } from '@/components/ui/Surface';
@@ -20,19 +22,28 @@ export default async function NewProductionPage({
   const query = await searchParams;
   const context = await apiFetch<InventoryContextView>('/api/inventory/context');
   const resolved = resolveInventoryScope(context, query.scope);
-  const [items, warehouses] = resolved.entityId
+  const [items, warehouses, formulas] = resolved.entityId
     ? await Promise.all([
         apiFetch<InventoryItemListView[]>('/api/inventory/items', { query: { entityId: resolved.entityId } }),
         apiFetch<WarehouseView[]>('/api/inventory/warehouses', { query: { entityId: resolved.entityId } }),
+        apiFetch<ProductionFormulaView[]>('/api/inventory/formulas', { query: { entityId: resolved.entityId } }).catch(
+          () => [] as ProductionFormulaView[],
+        ),
       ])
-    : [[], []];
+    : [[], [], []];
   const options = items.map((item) => ({ value: item.id, label: `${item.code} — ${item.name}` }));
+  const active = formulas.filter((row) => row.status === 'ACTIVE');
   return (
     <>
       <PageHeader
         eyebrow="Inventory"
         title="New production order"
-        description="Plan finished output and the raw materials to consume."
+        description="Plan finished output. Choose a formula to scale the raw materials, or list one raw material."
+        actions={
+          <Link href="/inventory/production/formulas" className="text-[13px] underline">
+            Formulas
+          </Link>
+        }
       />
       <Surface>
         <InventoryForm
@@ -49,8 +60,19 @@ export default async function NewProductionPage({
             },
             { name: 'finishedItemId', label: 'Finished item', required: true, options },
             { name: 'plannedOutputQty', label: 'Planned output', required: true, type: 'number' },
-            { name: 'inputItemId', label: 'Raw material', required: true, options },
-            { name: 'inputQty', label: 'Planned raw qty', required: true, type: 'number' },
+            {
+              name: 'formulaId',
+              label: 'Formula',
+              options: [
+                { value: '', label: 'No formula — list the raw material below' },
+                ...active.map((row) => ({
+                  value: row.id,
+                  label: `${row.code} v${row.version} — ${row.finishedItemCode} (per ${row.baseOutputQty})`,
+                })),
+              ],
+            },
+            { name: 'inputItemId', label: 'Raw material (without formula)', options: [{ value: '', label: '—' }, ...options] },
+            { name: 'inputQty', label: 'Planned raw qty', type: 'number' },
             { name: 'inputBatchCode', label: 'Raw batch (if tracked)' },
           ]}
         />

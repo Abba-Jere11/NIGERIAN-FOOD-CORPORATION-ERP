@@ -4,6 +4,7 @@ import { EmptyState } from '@/components/ui/States';
 import { apiFetch } from '@/lib/api';
 import { InventoryForm } from '../InventoryForm';
 import { createCountAction, submitCountAction, updateCountLineAction } from '../actions';
+import { countAdjustmentAction } from '../desk-actions';
 import { inventoryApiQuery, resolveInventoryScope } from '../scope';
 
 export const dynamic = 'force-dynamic';
@@ -31,12 +32,19 @@ export default async function InventoryCountsPage({
       : [[], []];
   const open = rows.find((row) => row.id === query.open) ?? rows.find((row) => row.status === 'OPEN');
   const today = new Date().toISOString().slice(0, 10);
+  const canPrepare = me.permissions.includes('inventory.adjust.prepare');
+  const adjustable = rows.filter(
+    (row) =>
+      row.status === 'COMPLETED' &&
+      !row.adjustmentId &&
+      row.lines.some((line) => (line.varianceQty ?? 0) !== 0),
+  );
   return (
     <>
       <PageHeader
         eyebrow="Inventory"
         title="Stocktaking"
-        description="Blind counts hide system quantity. Submit creates a pending variance adjustment."
+        description="Blind counts hide system quantity. Submitting completes the count (VER-); the Procurement Manager then prepares any adjustment from its variances."
       />
       {me.permissions.includes('inventory.count') && resolved.entityId ? (
         <Surface className="mb-4">
@@ -87,7 +95,10 @@ export default async function InventoryCountsPage({
                   <td className="px-4 py-2">{row.referenceNumber}</td>
                   <td className="px-4 py-2">{row.warehouseName}</td>
                   <td className="px-4 py-2">{row.mode}</td>
-                  <td className="px-4 py-2">{row.status}</td>
+                  <td className="px-4 py-2">
+                    {row.status}
+                    {row.adjustmentReference ? ` · ${row.adjustmentReference}` : ''}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -126,6 +137,11 @@ export default async function InventoryCountsPage({
                           required: true,
                           defaultValue: line.countedQty === null ? '' : String(line.countedQty),
                         },
+                        {
+                          name: 'explanation',
+                          label: 'Variance explanation',
+                          defaultValue: line.explanation ?? '',
+                        },
                       ]}
                     />
                   </td>
@@ -140,6 +156,48 @@ export default async function InventoryCountsPage({
           />
         </Surface>
       ) : null}
+      {canPrepare
+        ? adjustable.map((count) => {
+            const variances = count.lines.filter((line) => (line.varianceQty ?? 0) !== 0);
+            return (
+              <Surface key={count.id} className="mt-4" padded={false}>
+                <SurfaceHeader
+                  title={`${count.referenceNumber} · completed`}
+                  description="Prepare the stock adjustment from this count. It goes to ED Operations for approval."
+                />
+                <ul className="px-4 py-2 text-[13px]">
+                  {variances.map((line) => (
+                    <li key={line.id}>
+                      {line.itemCode} — {line.itemName}: system {line.systemQty}, counted {line.countedQty}, variance{' '}
+                      {(line.varianceQty ?? 0) > 0 ? '+' : ''}
+                      {line.varianceQty}
+                      {line.explanation ? ` · ${line.explanation}` : ''}
+                    </li>
+                  ))}
+                </ul>
+                <InventoryForm
+                  action={countAdjustmentAction}
+                  entityId={count.entityId}
+                  submitLabel="Prepare adjustment"
+                  fields={[
+                    { name: 'countId', label: '', type: 'hidden', defaultValue: count.id },
+                    { name: 'warehouseId', label: '', type: 'hidden', defaultValue: count.warehouseId },
+                    {
+                      name: 'lines',
+                      label: '',
+                      type: 'hidden',
+                      defaultValue: JSON.stringify(
+                        variances.map((line) => ({ itemId: line.itemId, quantity: line.varianceQty })),
+                      ),
+                    },
+                    { name: 'reason', label: 'Reason', required: true },
+                    { name: 'occurredOn', label: 'Date', type: 'date', required: true, defaultValue: today },
+                  ]}
+                />
+              </Surface>
+            );
+          })
+        : null}
     </>
   );
 }

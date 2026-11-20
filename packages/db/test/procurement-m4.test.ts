@@ -283,10 +283,10 @@ describe('M4 payment execution', () => {
     expect(wf.status).toBe('IN_PROGRESS');
     expect(wf.seals.map((seal) => seal.action)).toEqual(expect.arrayContaining(['paid']));
 
-    await expect(delivery.complete(officer, paid.id)).rejects.toBeInstanceOf(ConflictError);
+    await expect(delivery.complete(musa, paid.id)).rejects.toBeInstanceOf(ConflictError);
 
     const evidence = await cert(paid.id, 'm4-retain-cert');
-    const done = await delivery.recordReceipt(officer, paid.id, {
+    const received = await delivery.recordReceipt(officer, paid.id, {
       receivedDate: '2026-10-04',
       location: 'YFZ mill stores',
       quantityReceived: 2,
@@ -294,6 +294,8 @@ describe('M4 payment execution', () => {
       idempotencyKey: `m4-grn-${paid.id}`,
       documents: [{ documentId: evidence.id, kind: 'completion_certificate' }],
     });
+    expect(received.status).toBe('AWAITING_COMPLETION');
+    const done = await delivery.complete(musa, paid.id);
     expect(done.status).toBe('COMPLETED');
     expect(done.deliveryComplete).toBe(true);
     expect(done.paymentComplete).toBe(true);
@@ -350,7 +352,9 @@ describe('M4 payment execution', () => {
     expect(rest.deliveryComplete).toBe(true);
     expect(rest.payableAmountKobo).toBe(100_000);
 
-    const settled = await pay(rest.id, 100_000, `m4-l2-pay-${rest.id}`);
+    const paidOff = await pay(rest.id, 100_000, `m4-l2-pay-${rest.id}`);
+    expect(paidOff.status).toBe('AWAITING_COMPLETION');
+    const settled = await delivery.complete(musa, rest.id);
     expect(settled.status).toBe('COMPLETED');
     expect(settled.paymentComplete).toBe(true);
     expect((await workflows.get(musa, settled.workflowInstanceId!)).status).toBe('COMPLETED');

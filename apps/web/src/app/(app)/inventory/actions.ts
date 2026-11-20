@@ -71,6 +71,27 @@ export async function createWarehouseAction(
   return { status: 'ok', message: 'Warehouse saved.' };
 }
 
+export async function createLocationAction(
+  _previous: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await apiFetch('/api/inventory/locations', {
+      method: 'POST',
+      body: {
+        entityId: text(formData, 'entityId'),
+        warehouseId: text(formData, 'warehouseId'),
+        code: text(formData, 'code'),
+        name: text(formData, 'name'),
+      },
+    });
+  } catch (error) {
+    return toActionResult(error);
+  }
+  revalidatePath('/inventory/warehouses');
+  return { status: 'ok', message: 'Location saved.' };
+}
+
 export async function upsertCategoryAction(
   _previous: ActionResult,
   formData: FormData,
@@ -100,6 +121,7 @@ export async function issueAction(_previous: ActionResult, formData: FormData): 
         warehouseId: text(formData, 'warehouseId'),
         destinationType: text(formData, 'destinationType'),
         destinationLabel: text(formData, 'destinationLabel') || undefined,
+        recipientName: text(formData, 'recipientName') || undefined,
         reason: text(formData, 'reason'),
         occurredOn: text(formData, 'occurredOn'),
         idempotencyKey: text(formData, 'idempotencyKey') || `web-ist-${randomUUID()}`,
@@ -229,7 +251,10 @@ export async function updateCountLineAction(
       `/api/inventory/counts/${text(formData, 'countId')}/lines/${text(formData, 'lineId')}`,
       {
         method: 'PATCH',
-        body: { countedQty: Number(text(formData, 'countedQty')) },
+        body: {
+          countedQty: Number(text(formData, 'countedQty')),
+          explanation: text(formData, 'explanation') || undefined,
+        },
       },
     );
   } catch (error) {
@@ -250,7 +275,7 @@ export async function submitCountAction(
   }
   revalidatePath('/inventory/counts');
   revalidatePath('/inventory/adjustments');
-  return { status: 'ok', message: 'Count submitted. Variances await adjustment approval.' };
+  return { status: 'ok', message: 'Count completed. Prepare an adjustment from any variances.' };
 }
 
 export async function createProductionAction(
@@ -267,14 +292,18 @@ export async function createProductionAction(
         warehouseId: text(formData, 'warehouseId'),
         finishedItemId: text(formData, 'finishedItemId'),
         plannedOutputQty: Number(text(formData, 'plannedOutputQty')),
-        inputs: [
-          {
-            itemId: text(formData, 'inputItemId'),
-            warehouseId: text(formData, 'warehouseId'),
-            plannedQty: Number(text(formData, 'inputQty')),
-            batchCode: text(formData, 'inputBatchCode') || undefined,
-          },
-        ],
+        formulaId: text(formData, 'formulaId') || undefined,
+        inputs:
+          text(formData, 'formulaId') || !text(formData, 'inputItemId')
+            ? []
+            : [
+                {
+                  itemId: text(formData, 'inputItemId'),
+                  warehouseId: text(formData, 'warehouseId'),
+                  plannedQty: Number(text(formData, 'inputQty')),
+                  batchCode: text(formData, 'inputBatchCode') || undefined,
+                },
+              ],
       },
     });
   } catch (error) {
@@ -428,13 +457,14 @@ export async function dispatchSalesAction(
         destination: text(formData, 'destination'),
         occurredOn: text(formData, 'occurredOn'),
         documentId: text(formData, 'documentId') || undefined,
-        lines: [
-          {
-            orderLineId: text(formData, 'orderLineId'),
-            quantity: Number(text(formData, 'quantity')),
-            batchCode: text(formData, 'batchCode') || undefined,
-          },
-        ],
+        lines: formData
+          .getAll('orderLineId')
+          .map((value, index) => ({
+            orderLineId: String(value),
+            quantity: Number(formData.getAll('quantity')[index] ?? 0),
+            batchCode: String(formData.getAll('batchCode')[index] ?? '') || undefined,
+          }))
+          .filter((line) => line.orderLineId && line.quantity > 0),
       },
     });
   } catch (error) {

@@ -7,6 +7,7 @@ import { Button, ButtonLink } from '@/components/ui/Button';
 import { EntitySwitcher } from '@/app/(edms)/edms/(portal)/EntitySwitcher';
 import { SearchForm } from '@/app/(edms)/edms/(portal)/SearchForm';
 import { cx } from '@/lib/cx';
+import { ScanIconLink } from '@/components/shell/ScanIconLink';
 import { FolderTree } from './FolderTree';
 
 export type EdmsSpace = 'active' | 'archived';
@@ -38,6 +39,7 @@ export function EdmsWorkspace({
   entities,
   canUpload,
   canSearchAll,
+  canScan = false,
   children,
 }: {
   code: string;
@@ -45,6 +47,7 @@ export function EdmsWorkspace({
   entities: EdmsGatewayEntityView[];
   canUpload: boolean;
   canSearchAll: boolean;
+  canScan?: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -116,6 +119,7 @@ export function EdmsWorkspace({
           <Suspense fallback={null}>
             <SearchForm entityCode={code} canSearchAll={canSearchAll} />
           </Suspense>
+          {canScan ? <ScanIconLink className="text-ink-700 hover:bg-ink-100" /> : null}
         </div>
       </div>
 

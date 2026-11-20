@@ -13,7 +13,7 @@ import { apiFetch } from '@/lib/api';
 import { inventoryApiQuery, inventoryScopeParam, resolveInventoryScope, withInvScope } from '../scope';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Item catalogue — Inventory — NFC' };
+export const metadata = { title: 'Stock Register — Inventory — NFC' };
 
 function statusLabel(status: 'out' | 'low' | 'in_stock'): string {
   if (status === 'out') return 'Out of stock';
@@ -56,8 +56,8 @@ export default async function InventoryItemsPage({
     <>
       <PageHeader
         eyebrow="Inventory"
-        title="Item catalogue"
-        description="Master data per subsidiary. The same code at another subsidiary is a different item. Stock on hand is derived from movements."
+        title="Stock Register"
+        description="Master data per subsidiary. On hand includes reserved and quarantined stock; only available stock can be issued. Expected is a forecast from approved procurement, never a balance."
         actions={
           me.permissions.includes('inventory.item.manage') && resolved.entityId ? (
             <ButtonLink href={withInvScope('/inventory/items/new', resolved.entityCode)} variant="primary">
@@ -130,6 +130,9 @@ export default async function InventoryItemsPage({
                 <th className="px-4 py-2">On hand</th>
                 <th className="px-4 py-2">Reserved</th>
                 <th className="px-4 py-2">Available</th>
+                <th className="px-4 py-2">Quarantined</th>
+                <th className="px-4 py-2">In production</th>
+                <th className="px-4 py-2">Expected (forecast)</th>
                 <th className="px-4 py-2">Value</th>
                 <th className="px-4 py-2">Status</th>
               </tr>
@@ -149,6 +152,9 @@ export default async function InventoryItemsPage({
                   <td className="tabular px-4 py-2">{row.onHandQty}</td>
                   <td className="tabular px-4 py-2">{row.reservedQty}</td>
                   <td className="tabular px-4 py-2">{row.availableQty}</td>
+                  <td className="tabular px-4 py-2">{row.quarantinedQty}</td>
+                  <td className="tabular px-4 py-2">{row.wipQty}</td>
+                  <td className="tabular px-4 py-2 text-ink-500">{row.incomingQty}</td>
                   <td className="tabular px-4 py-2">{formatKobo(BigInt(row.onHandValueKobo))}</td>
                   <td className="px-4 py-2">{statusLabel(inventoryStockStatus(row))}</td>
                 </tr>

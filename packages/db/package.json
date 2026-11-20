@@ -17,6 +17,7 @@
     "bootstrap": "tsx src/cli/bootstrap.ts",
     "migrate": "tsx src/cli/migrate.ts",
     "seed": "tsx src/cli/seed.ts",
+    "seed:inventory": "tsx src/cli/seed-inventory.ts",
     "reset": "tsx src/cli/reset.ts"
   },
   "dependencies": {

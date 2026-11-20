@@ -30,7 +30,7 @@ export default defineConfig({
           // being tested.
           pool: 'forks',
           poolOptions: { forks: { singleFork: true } },
-          testTimeout: 30_000,
+          testTimeout: 90_000,
           hookTimeout: 120_000,
         },
       },

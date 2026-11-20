@@ -214,6 +214,9 @@ interface LoadedLine {
   received_quantity: number;
   rejected_quantity: number;
   second_batch_due_on: Date | string | null;
+  inventory_item_id: string | null;
+  inventory_item_code: string | null;
+  inventory_item_name: string | null;
 }
 
 type LineWrite = {
@@ -223,6 +226,8 @@ type LineWrite = {
   unitId?: string | null;
   unitPriceKobo?: number | null;
   budgetLineId?: string | null;
+  inventoryItemId?: string | null;
+  createStockItem?: boolean;
 };
 
 const LOAD_SQL = `
@@ -616,7 +621,7 @@ export class ProcurementService {
                     JOIN procurement_version_lines l ON l.id = d.line_id
                    WHERE d.request_id = r.id
                      AND COALESCE(l.quantity, 0) > COALESCE((
-                       SELECT sum(g.quantity_accepted)
+                       SELECT sum(g.quantity_accepted + g.quantity_quarantined)
                          FROM procurement_goods_receipts g
                         WHERE g.request_id = r.id
                           AND coalesce(g.line_id, (
@@ -1714,6 +1719,7 @@ export class ProcurementService {
       }
       const lines = await this.loadLines(tx, current.version_id, current.id);
       this.assertReadyToSubmit(current, lines);
+      this.assertLinesMapped(lines);
       const quotes = await this.loadQuotations(tx, current.version_id);
       if (current.requisition_id) this.assertQuotationComparison(current, quotes, lines);
       if (!current.vendor_id) throw new ValidationFailedError('A vendor is required.');
@@ -2161,11 +2167,6 @@ export class ProcurementService {
       (line) => line.stock_item || line.asset,
     );
     for (const line of stockLines) {
-      await this.inventory?.applyExpectedInTx(tx, actor, {
-        requestId: current.id,
-        lineId: line.id,
-        entityId: current.entity_id,
-      });
       await tx.publish({
         eventType: 'inventory.expected_stock.requested',
         subjectType: 'PROCUREMENT',
@@ -3044,6 +3045,7 @@ export class ProcurementService {
               ? null
               : Number(first.unit_price_kobo),
         budgetLineId: input.budgetLineId !== undefined ? input.budgetLineId : (first?.budget_line_id ?? null),
+        inventoryItemId: first?.inventory_item_id ?? null,
       },
     ];
   }
@@ -3061,6 +3063,16 @@ export class ProcurementService {
     for (const line of lines) {
       if (line.budgetLineId) await this.assertBudgetLine(tx, line.budgetLineId, entityId);
     }
+    const previous = await tx.client.query<{ line_number: number; inventory_item_id: string | null }>(
+      `SELECT line_number, inventory_item_id FROM procurement_version_lines WHERE version_id = $1`,
+      [versionId],
+    );
+    const previousItem = new Map(previous.rows.map((row) => [row.line_number, row.inventory_item_id]));
+    const vendor = await tx.client.query<{ vendor_id: string | null }>(
+      `SELECT r.vendor_id FROM procurement_versions v JOIN procurement_requests r ON r.id = v.request_id
+        WHERE v.id = $1`,
+      [versionId],
+    );
     await tx.client.query(`DELETE FROM procurement_version_lines WHERE version_id = $1`, [versionId]);
     for (let index = 0; index < lines.length; index += 1) {
       const line = lines[index]!;
@@ -3068,11 +3080,14 @@ export class ProcurementService {
         line.quantity != null && line.unitPriceKobo != null
           ? Number(multiplyKoboByQuantity(BigInt(line.unitPriceKobo), line.quantity))
           : null;
+      const itemId = await this.resolveLineItem(tx, actor, entityId, vendor.rows[0]?.vendor_id ?? null, line, {
+        previous: previousItem.get(index + 1) ?? null,
+      });
       await tx.client.query(
         `INSERT INTO procurement_version_lines (
            version_id, entity_id, line_number, description, category_id, quantity, unit_id,
-           unit_price_kobo, line_amount_kobo, budget_line_id, created_by, updated_by
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)`,
+           unit_price_kobo, line_amount_kobo, budget_line_id, created_by, updated_by, inventory_item_id
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11, $12)`,
         [
           versionId,
           entityId,
@@ -3085,7 +3100,50 @@ export class ProcurementService {
           amount,
           line.budgetLineId ?? null,
           actor.ref,
+          itemId,
         ],
+      );
+    }
+  }
+
+  /** The Stock Register item for a stock/asset line; services lines carry none. */
+  private async resolveLineItem(
+    tx: TxScope,
+    actor: ActorContext,
+    entityId: string,
+    vendorId: string | null,
+    line: LineWrite,
+    opts: { previous: string | null },
+  ): Promise<string | null> {
+    if (!line.categoryId) return null;
+    const category = await tx.client.query<{ key: string; stocked: boolean; asset: boolean }>(
+      `SELECT key, coalesce(stock_item OR asset, false) AS stocked, coalesce(asset, false) AS asset
+         FROM procurement_categories WHERE id = $1`,
+      [line.categoryId],
+    );
+    const row = category.rows[0];
+    if (!row?.stocked) return null;
+    const requested = line.inventoryItemId !== undefined ? line.inventoryItemId : opts.previous;
+    if (!requested && !line.createStockItem) return null;
+    if (!this.inventory) return requested ?? null;
+    return this.inventory.mapLineItemInTx(tx, actor, {
+      entityId,
+      description: line.description?.trim() ?? '',
+      unitId: line.unitId ?? null,
+      asset: row.asset,
+      categoryKey: row.key,
+      vendorId,
+      itemId: requested ?? null,
+    });
+  }
+
+  /** Stock and asset lines must name their Stock Register item before submission. */
+  private assertLinesMapped(lines: LoadedLine[]): void {
+    const unmapped = lines.filter((line) => (line.stock_item || line.asset) && !line.inventory_item_id);
+    if (unmapped.length > 0) {
+      throw new ValidationFailedError(
+        `Map ${unmapped.map((line) => `item ${line.line_number}`).join(', ')} to a Stock Register item before submitting.`,
+        { lines: unmapped.map((line) => line.line_number) },
       );
     }
   }
@@ -3099,10 +3157,10 @@ export class ProcurementService {
     await tx.client.query(
       `INSERT INTO procurement_version_lines (
          version_id, entity_id, line_number, description, category_id, quantity, unit_id,
-         unit_price_kobo, line_amount_kobo, budget_line_id, created_by, updated_by
+         unit_price_kobo, line_amount_kobo, budget_line_id, created_by, updated_by, inventory_item_id
        )
        SELECT $1, entity_id, line_number, description, category_id, quantity, unit_id,
-              unit_price_kobo, line_amount_kobo, budget_line_id, $2, $2
+              unit_price_kobo, line_amount_kobo, budget_line_id, $2, $2, inventory_item_id
          FROM procurement_version_lines
         WHERE version_id = $3
         ORDER BY line_number`,
@@ -3121,10 +3179,12 @@ export class ProcurementService {
               bl.approved_amount_kobo::text AS budget_approved_kobo,
               c.required_delivery_document_set,
               received.accepted_quantity, received.received_quantity, received.rejected_quantity,
-              d.due_on AS second_batch_due_on
+              d.due_on AS second_batch_due_on,
+              l.inventory_item_id, ii.code AS inventory_item_code, ii.name AS inventory_item_name
          FROM procurement_version_lines l
+         LEFT JOIN inventory_items ii ON ii.id = l.inventory_item_id
          LEFT JOIN LATERAL (
-           SELECT coalesce(sum(g.quantity_accepted), 0)::int AS accepted_quantity,
+           SELECT coalesce(sum(g.quantity_accepted + g.quantity_quarantined), 0)::int AS accepted_quantity,
                   coalesce(sum(g.quantity_received), 0)::int AS received_quantity,
                   coalesce(sum(g.quantity_rejected), 0)::int AS rejected_quantity
              FROM procurement_goods_receipts g
@@ -3188,6 +3248,9 @@ export class ProcurementService {
         rejectedQuantity: Number(line.rejected_quantity ?? 0),
         outstandingQuantity: Math.max(quantity - accepted, 0),
         secondBatchDueOn: line.second_batch_due_on ? formatLagosIsoDate(line.second_batch_due_on) : null,
+        inventoryItemId: line.inventory_item_id,
+        inventoryItemCode: line.inventory_item_code,
+        inventoryItemName: line.inventory_item_name,
       };
     });
   }
@@ -3487,6 +3550,8 @@ export class ProcurementService {
       quantity_received: number;
       quantity_accepted: number;
       quantity_rejected: number;
+      quantity_quarantined: number;
+      quarantine_reason: string | null;
       reject_reason: string | null;
       condition_notes: string | null;
       supersedes_id: string | null;
@@ -3496,6 +3561,7 @@ export class ProcurementService {
     }>(
       `SELECT g.id, g.reference_number, g.received_date, g.location, g.line_id, g.delivery_id, l.line_number,
               g.quantity_ordered, g.quantity_received, g.quantity_accepted, g.quantity_rejected,
+              g.quantity_quarantined, g.quarantine_reason,
               g.reject_reason, g.condition_notes, g.supersedes_id, g.created_at,
               app.user_public_name(
                 CASE WHEN g.created_by ~ '^[0-9a-f-]{36}$' THEN g.created_by::uuid ELSE NULL END
@@ -3531,6 +3597,8 @@ export class ProcurementService {
       quantityReceived: row.quantity_received,
       quantityAccepted: row.quantity_accepted,
       quantityRejected: row.quantity_rejected,
+      quantityQuarantined: row.quantity_quarantined,
+      quarantineReason: row.quarantine_reason,
       rejectReason: row.reject_reason,
       conditionNotes: row.condition_notes,
       supersedesId: row.supersedes_id,

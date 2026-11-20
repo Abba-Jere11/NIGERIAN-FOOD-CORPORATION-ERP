@@ -2,7 +2,7 @@
 
 All access is enforced with `can()` and permission keys — never role names in application logic.
 
-| Role | My dashboard (`homePath`) | Primary responsibilities |
+| Role | Dashboard (`homePath`) | Primary responsibilities |
 | --- | --- | --- |
 | General Manager (`gm`) | `/home/gm` | Subsidiary requisitions, returned needs, entity procurement board |
 | ED Operations (`ed_operations`) | `/home/ed-operations` | Machinery procurement review, ageing, cross-subsidiary inventory view |
@@ -15,7 +15,7 @@ All access is enforced with `can()` and permission keys — never role names in 
 
 ## Corporate home vs role dashboard
 
-After sign-in, everyone lands on **`/home`** (corporate summary). Use **My dashboard** in the sidebar for role-specific queues and KPI tiles.
+After sign-in, everyone lands on **`/home`** (corporate summary). Use **Dashboard** in the sidebar for role-specific queues and KPI tiles.
 
 ## Cannot do (high level)
 

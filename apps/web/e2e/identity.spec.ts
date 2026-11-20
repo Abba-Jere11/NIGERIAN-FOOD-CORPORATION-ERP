@@ -9,9 +9,9 @@ import { apiLogin, csrfHeaders, loginAs, unique } from './support';
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4000';
 
 const HOMES = [
-  { email: 'gm.yfz@nfc.local', path: '/home/gm', nav: 'Home', kpi: 'My requests this month' },
-  { email: 'ed.operations@nfc.local', path: '/home/ed-operations', nav: 'Home', kpi: 'Awaiting my review' },
-  { email: 'md@nfc.local', path: '/home/md', nav: 'Audit log', kpi: 'Pending my final approval' },
+  { email: 'gm.yfz@nfc.local', path: '/home/gm', nav: 'Home', kpi: 'Requests this month' },
+  { email: 'ed.operations@nfc.local', path: '/home/ed-operations', nav: 'Home', kpi: 'Awaiting review' },
+  { email: 'md@nfc.local', path: '/home/md', nav: 'Audit log', kpi: 'Pending final approval' },
   { email: 'ed.finance@nfc.local', path: '/home/ed-finance', nav: 'Audit log', kpi: 'Cash position' },
   { email: 'fh.yfz@nfc.local', path: '/home/finance-head', nav: 'Home', kpi: 'Awaiting payment' },
   { email: 'inventory@nfc.local', path: '/home/inventory', nav: 'Home', kpi: 'Partially received' },

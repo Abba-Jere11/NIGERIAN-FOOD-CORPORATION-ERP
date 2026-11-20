@@ -5,6 +5,7 @@ import type {
   BudgetLineView,
   DepartmentView,
   FundingSourceView,
+  InventoryItemListView,
   ProcurementCategoryView,
   ProcurementView,
   ProjectView,
@@ -42,6 +43,7 @@ export function ProcurementForm({
   budgetLines,
   projects,
   vendors,
+  stockItems = [],
   prepareMode = false,
 }: {
   request?: ProcurementView;
@@ -52,6 +54,7 @@ export function ProcurementForm({
   budgetLines: BudgetLineView[];
   projects: ProjectView[];
   vendors: VendorListItemView[];
+  stockItems?: InventoryItemListView[];
   prepareMode?: boolean;
 }) {
   if (!request) return <CreateProcurementForm departments={departments} />;
@@ -65,6 +68,7 @@ export function ProcurementForm({
       budgetLines={budgetLines}
       projects={projects}
       vendors={vendors}
+      stockItems={stockItems}
       prepareMode={prepareMode}
     />
   );
@@ -101,6 +105,7 @@ function EditProcurementForm({
   budgetLines,
   projects,
   vendors,
+  stockItems,
   prepareMode,
 }: {
   request: ProcurementView;
@@ -111,6 +116,7 @@ function EditProcurementForm({
   budgetLines: BudgetLineView[];
   projects: ProjectView[];
   vendors: VendorListItemView[];
+  stockItems: InventoryItemListView[];
   prepareMode: boolean;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -126,6 +132,11 @@ function EditProcurementForm({
   const [lineQty, setLineQty] = useState<Record<string, string>>(() => {
     const next: Record<string, string> = {};
     for (const line of request.lines ?? []) next[line.id] = String(line.quantity);
+    return next;
+  });
+  const [lineCategory, setLineCategory] = useState<Record<string, string>>(() => {
+    const next: Record<string, string> = {};
+    for (const line of request.lines ?? []) next[line.id] = line.categoryId ?? '';
     return next;
   });
   const [linePrices, setLinePrices] = useState<Record<string, bigint | null>>(() => {
@@ -240,8 +251,28 @@ function EditProcurementForm({
                 name={`lines[${index}].categoryId`}
                 required
                 defaultValue={existing?.categoryId ?? ''}
+                onChange={(event) => setLineCategory((current) => ({ ...current, [key]: event.target.value }))}
                 options={categories.map((row) => ({ value: row.id, label: row.name }))}
               />
+              {(() => {
+                const category = categories.find((row) => row.id === (lineCategory[key] ?? existing?.categoryId));
+                if (!category || (!category.stockItem && !category.asset)) return null;
+                const matching = stockItems.filter((item) => item.asset === category.asset);
+                return (
+                  <SelectField
+                    label="Stock Register item"
+                    name={`lines[${index}].inventoryItemId`}
+                    required
+                    defaultValue={existing?.inventoryItemId ?? ''}
+                    placeholder="Choose an item"
+                    hint="Stock and asset lines must be mapped to an item before submission."
+                    options={[
+                      { value: '__create__', label: 'Create a new item from this line' },
+                      ...matching.map((item) => ({ value: item.id, label: `${item.code} — ${item.name}` })),
+                    ]}
+                  />
+                );
+              })()}
               <TextField
                 label="Quantity"
                 name={`lines[${index}].quantity`}

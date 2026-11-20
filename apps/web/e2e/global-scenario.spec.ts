@@ -12,7 +12,7 @@ test.describe('M19 global scenario smoke', () => {
 
   test('corporate home links to role dashboard', async ({ page }) => {
     await loginAs(page, 'md@nfc.local');
-    await page.getByRole('link', { name: 'My role dashboard' }).click();
+    await page.getByRole('link', { name: 'Role dashboard' }).click();
     await expect(page).toHaveURL(/\/home\/md/);
   });
 });

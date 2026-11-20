@@ -22,7 +22,7 @@ export default async function MessagesPage() {
   return (
     <>
       <PageHeader
-        eyebrow="My workspace"
+        eyebrow="Workspace"
         title="Messages"
         description="Direct messages, groups, and your department channel. This page refreshes when you open a thread."
       />

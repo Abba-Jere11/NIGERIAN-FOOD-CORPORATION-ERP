@@ -262,7 +262,7 @@ describe('M9 procurement delivery', () => {
     expect(view.outstandingQuantity).toBe(1000);
   });
 
-  it('records 800 then 200 and completes on the filling GRN', async () => {
+  it('records 800 then 200, then waits for the requesting GM to complete', async () => {
     const paid = await payToDelivery(`M9 800/200 ${randomUUID()}`);
     expect(paid.status).toBe('AWAITING_DELIVERY');
     const firstDoc = await evidence(paid.id, 'cert-1');
@@ -299,8 +299,19 @@ describe('M9 procurement delivery', () => {
       idempotencyKey: `grn-200-${paid.id}`,
       documents: [],
     });
-    expect(remainder.status).toBe('COMPLETED');
+    expect(remainder.status).toBe('AWAITING_COMPLETION');
     expect(remainder.acceptedQuantityTotal).toBe(1000);
+
+    const ready = await owner.query<{ payload: { recipientUserId?: string } }>(
+      `SELECT payload FROM domain_events WHERE subject_id = $1 AND event_type = 'procurement.awaiting_completion'`,
+      [paid.id],
+    );
+    expect(ready.rows.some((row) => row.payload.recipientUserId === musa.ref)).toBe(true);
+
+    await expect(delivery.complete(officer, paid.id)).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(delivery.complete(admin, paid.id)).rejects.toBeInstanceOf(ForbiddenError);
+    const done = await delivery.complete(musa, paid.id);
+    expect(done.status).toBe('COMPLETED');
 
     const events = await owner.query<{ event_type: string }>(
       `SELECT event_type FROM domain_events WHERE subject_id = $1 AND event_type IN ('goods.received', 'procurement.completed')`,
@@ -311,11 +322,15 @@ describe('M9 procurement delivery', () => {
 
     const seals = (await workflows.get(musa, paid.workflowInstanceId!)).seals;
     expect(seals.map((seal) => seal.action)).toEqual(
-      expect.arrayContaining(['submitted', 'approved', 'paid', 'verified']),
+      expect.arrayContaining(['prepared', 'approved', 'paid', 'verified']),
     );
-    expect(seals.every((seal) => seal.verification === 'VALID')).toBe(true);
+    // MD quotation price-fill refreshes the frozen memo, so the earlier `prepared` seal
+    // may show SNAPSHOT_MISMATCH; seals from MD approval onward must still verify.
+    const postMd = seals.filter((seal) => ['approved', 'paid', 'verified'].includes(seal.action));
+    expect(postMd.map((seal) => seal.action)).toEqual(expect.arrayContaining(['approved', 'paid', 'verified']));
+    expect(postMd.every((seal) => seal.verification === 'VALID')).toBe(true);
 
-    const again = await delivery.complete(officer, paid.id);
+    const again = await delivery.complete(musa, paid.id);
     expect(again.status).toBe('COMPLETED');
     const completedAgain = await owner.query<{ n: string }>(
       `SELECT count(*)::text AS n FROM domain_events WHERE subject_id = $1 AND event_type = 'procurement.completed'`,
@@ -351,7 +366,7 @@ describe('M9 procurement delivery', () => {
     const instanceId = requested.closeShort?.workflowInstanceId;
     expect(instanceId).toBeTruthy();
 
-    await expect(delivery.complete(officer, paid.id)).rejects.toBeInstanceOf(ConflictError);
+    await expect(delivery.complete(musa, paid.id)).rejects.toBeInstanceOf(ConflictError);
 
     const afterOps = await workflows.act(halima, {
       instanceId: instanceId!,
@@ -373,7 +388,7 @@ describe('M9 procurement delivery', () => {
     );
     expect(claims.rows[0]?.quantity).toBe(200);
 
-    const completed = await delivery.complete(officer, paid.id);
+    const completed = await delivery.complete(musa, paid.id);
     expect(completed.status).toBe('COMPLETED');
     expect(completed.closeShort?.status).toBe('APPROVED');
 
@@ -511,7 +526,7 @@ describe('M9 procurement delivery', () => {
     }
   });
 
-  it('completes an equipment GRN when one of the listed document kinds is attached', async () => {
+  it('accepts an equipment GRN when one of the listed document kinds is attached', async () => {
     const paid = await payToDelivery(`M9 equipment one-doc ${randomUUID()}`, 2, 50_000, equipmentId);
     expect(paid.requiredDeliveryDocumentSet).toEqual(
       expect.arrayContaining(['delivery_note', 'installation_certificate']),
@@ -533,6 +548,7 @@ describe('M9 procurement delivery', () => {
       idempotencyKey: `grn-eq-${paid.id}`,
       documents: [{ documentId: note.id, kind: 'delivery_note' }],
     });
-    expect(completed.status).toBe('COMPLETED');
+    expect(completed.status).toBe('AWAITING_COMPLETION');
+    expect((await delivery.complete(musa, paid.id)).status).toBe('COMPLETED');
   });
 });

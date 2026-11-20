@@ -453,6 +453,24 @@ export class DocumentsService {
     return this.decryptAndLog(actor, resolved.document, resolved.version);
   }
 
+  /**
+   * Streams the current version of a document linked to a record the caller
+   * has already authorised (an asset photo). Access is still logged.
+   */
+  async streamLinked(
+    actor: ActorContext,
+    documentId: string,
+  ): Promise<{ buffer: Buffer; mimeType: string; filename: string }> {
+    const resolved = await this.unitOfWork.read(actor, async (tx) => {
+      const document = await this.loadDocument(tx.client, documentId);
+      const versions = await this.loadVersions(tx.client, documentId);
+      const version = versions.find((row) => row.id === document.current_version_id);
+      if (!version) throw new NotFoundError('This document has no current version.');
+      return { document, version };
+    });
+    return this.decryptAndLog(actor, resolved.document, resolved.version);
+  }
+
   async decryptAndLog(
     actor: ActorContext,
     document: DocumentRow,

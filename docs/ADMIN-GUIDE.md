@@ -5,7 +5,7 @@ The Administrator role manages identity, platform health, and configuration visi
 ## Starting points
 
 - **Corporate home** (`/home`) — only failed jobs/mail/notifications when no business permissions are granted.
-- **My dashboard** (`/home/admin`) — links to users, roles, entities, sessions, permission log, health, workflow definitions, seal tool, document access explorer, notification templates, overdue workflows (read-only).
+- **Dashboard** (`/home/admin`) — links to users, roles, entities, sessions, permission log, health, workflow definitions, seal tool, document access explorer, notification templates, overdue workflows (read-only).
 
 ## Users and access
 

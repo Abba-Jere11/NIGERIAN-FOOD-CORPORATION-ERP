@@ -99,9 +99,9 @@ export default async function GmHomePage({
       <PendingActionsPanel />
 
       <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-6">
-        <HomeKpiCard label="My requests this month" value={requestsThisMonth} href="/requisitions" />
+        <HomeKpiCard label="Requests this month" value={requestsThisMonth} href="/requisitions" />
         <HomeKpiCard
-          label="Awaiting my action"
+          label="Awaiting action"
           value={returned.length}
           href="/home/gm"
           danger={returned.length > 0}

@@ -8,7 +8,7 @@ import { ActionForm } from '../ActionForm';
 import { requestOwnLeave } from '../actions';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'My leave — NFC' };
+export const metadata = { title: 'Leave — NFC' };
 
 export default async function MeLeavePage() {
   const me = await apiFetch<MeView>('/api/me');
@@ -24,7 +24,7 @@ export default async function MeLeavePage() {
 
   return (
     <>
-      <PageHeader eyebrow="My workspace" title="Leave" description="A colleague in your department covers you first." />
+      <PageHeader eyebrow="Workspace" title="Leave" description="A colleague in your department covers you first." />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Surface>
           <SurfaceHeader title="Request leave" />

@@ -22,6 +22,7 @@
     "db:bootstrap": "pnpm --filter @nfc/db bootstrap",
     "db:migrate": "pnpm --filter @nfc/db migrate",
     "db:seed": "pnpm --filter @nfc/db seed",
+    "db:seed:inventory": "pnpm --filter @nfc/db seed:inventory",
     "db:reset": "pnpm --filter @nfc/db reset",
     "dev": "pnpm --parallel --filter @nfc/api --filter @nfc/web dev",
     "dev:api": "pnpm --filter @nfc/api dev",

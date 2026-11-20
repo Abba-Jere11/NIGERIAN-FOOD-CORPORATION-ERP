@@ -93,7 +93,7 @@ export default async function EdOperationsHomePage({
       <PendingActionsPanel />
 
       <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <HomeKpiCard label="Awaiting my review" value={reviewQueue.length} href="/workflows" />
+        <HomeKpiCard label="Awaiting review" value={reviewQueue.length} href="/workflows" />
         <HomeKpiCard
           label="Overdue (7+ days)"
           value={overdue7}
@@ -166,7 +166,7 @@ export default async function EdOperationsHomePage({
 
         <div className="space-y-4">
           <Surface padded={false}>
-            <SurfaceHeader title="My recent decisions" description="Approvals, returns and rejections you recorded." />
+            <SurfaceHeader title="Recent decisions" description="Approvals, returns and rejections you recorded." />
             <HomeQueueTable
               rows={decisions.map((row) => ({
                 id: row.id,

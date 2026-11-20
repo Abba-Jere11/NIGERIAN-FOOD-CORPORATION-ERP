@@ -435,7 +435,7 @@ export class ProcurementController {
   }
 
   @Post('api/procurement/:id/complete')
-  @RequirePermission('procurement.verify.delivery')
+  @RequirePermission('procurement.complete')
   complete(@CurrentActor() actor: ActorContext, @Param('id', ParseUUIDPipe) id: string) {
     return this.delivery.complete(actor, id);
   }

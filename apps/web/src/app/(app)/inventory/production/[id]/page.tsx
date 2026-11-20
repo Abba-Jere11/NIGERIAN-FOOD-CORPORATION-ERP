@@ -7,6 +7,7 @@ import { apiFetch, ApiError } from '@/lib/api';
 import { workflowAction } from '../../../workflows/actions';
 import { InventoryForm } from '../../InventoryForm';
 import { cancelProductionAction, completeProductionAction, startProductionAction } from '../../actions';
+import { closeProductionAction } from '../../desk-actions';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Production order — Inventory — NFC' };
@@ -49,7 +50,24 @@ export default async function ProductionDetailPage({ params }: { params: Promise
             <dd>{order.finishedBatchCode ?? '—'}</dd>
             <dt className="text-ink-500">Produced on</dt>
             <dd>{order.producedOn ?? '—'}</dd>
+            <dt className="text-ink-500">Variance from plan</dt>
+            <dd>{order.varianceBps === null ? '—' : `${order.varianceBps / 100}%`}</dd>
+            {order.closeNote ? (
+              <>
+                <dt className="text-ink-500">Close note</dt>
+                <dd>{order.closeNote}</dd>
+              </>
+            ) : null}
           </dl>
+          {order.status === 'COMPLETED' ? (
+            <p className="px-4 pb-3 text-[12px] text-ink-600">
+              Output is quarantined until the GM releases it in{' '}
+              <a href="/inventory/qc" className="underline">
+                QC
+              </a>
+              .
+            </p>
+          ) : null}
         </Surface>
         <Surface padded={false}>
           <SurfaceHeader title="Inputs" />
@@ -92,9 +110,9 @@ export default async function ProductionDetailPage({ params }: { params: Promise
           </table>
         </Surface>
       ) : null}
-      {order.status === 'PLANNED' && me.permissions.includes('production.create') ? (
+      {order.status === 'PLANNED' && me.permissions.includes('production.complete') ? (
         <Surface className="mt-4">
-          <SurfaceHeader title="Start" description="Consumes raw materials into WIP." />
+          <SurfaceHeader title="Issue materials" description="Consumes raw materials into work in progress." />
           <InventoryForm
             action={startProductionAction}
             submitLabel="Start production"
@@ -117,10 +135,13 @@ export default async function ProductionDetailPage({ params }: { params: Promise
       ) : null}
       {order.status === 'IN_PROGRESS' && me.permissions.includes('production.complete') ? (
         <Surface className="mt-4">
-          <SurfaceHeader title="Submit complete" />
+          <SurfaceHeader
+            title="Record output"
+            description="Output goes into quarantine until the GM releases it. Output that differs from the plan beyond the configured tolerance goes to ED Operations."
+          />
           <InventoryForm
             action={completeProductionAction}
-            submitLabel="Submit for approval"
+            submitLabel="Record output"
             fields={[
               { name: 'id', label: 'id', type: 'hidden', defaultValue: order.id },
               { name: 'rowVersion', label: 'rowVersion', type: 'hidden', defaultValue: String(order.rowVersion) },
@@ -149,6 +170,24 @@ export default async function ProductionDetailPage({ params }: { params: Promise
               hiddenFields={{ id: order.id, rowVersion: String(order.rowVersion) }}
             />
           </div>
+        </Surface>
+      ) : null}
+      {order.status === 'COMPLETED' && me.permissions.includes('production.create') ? (
+        <Surface className="mt-4">
+          <SurfaceHeader title="Close order" description="Explain any variance or waste before closing." />
+          <InventoryForm
+            action={closeProductionAction}
+            submitLabel="Close order"
+            fields={[
+              { name: 'id', label: 'id', type: 'hidden', defaultValue: order.id },
+              { name: 'rowVersion', label: 'rowVersion', type: 'hidden', defaultValue: String(order.rowVersion) },
+              {
+                name: 'note',
+                label: 'Variance explanation',
+                required: (order.varianceBps ?? 0) > 0 || order.wasteQty > 0,
+              },
+            ]}
+          />
         </Surface>
       ) : null}
       {workflow && workflow.allowedActions.length > 0 ? (

@@ -24,12 +24,19 @@ import { zipStore } from './zip-store';
 
 const DELIVERY_STATUSES = ['AWAITING_DELIVERY', 'PARTIALLY_RECEIVED'] as const;
 
+function emptyToNull(value?: string | null): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
 export interface RecordReceiptInput {
   receivedDate: string;
   location: string;
   lineId?: string;
   quantityReceived: number;
   quantityAccepted: number;
+  quantityQuarantined?: number;
+  quarantineReason?: string;
   quantityRejected?: number;
   rejectReason?: string;
   conditionNotes?: string;
@@ -37,6 +44,7 @@ export interface RecordReceiptInput {
   idempotencyKey: string;
   documents: Array<{ documentId: string; kind: string }>;
   warehouseId?: string;
+  locationId?: string;
   batchCode?: string;
   serialCodes?: string[];
 }
@@ -45,10 +53,15 @@ export interface DeliveryItemInput {
   lineId: string;
   quantityReceived: number;
   quantityAccepted: number;
+  /** Received into the store but held for the GM's QC decision. */
+  quantityQuarantined?: number;
+  quarantineReason?: string;
   quantityRejected: number;
   rejectReason?: string;
   conditionNotes?: string;
   secondBatchDueOn?: string;
+  warehouseId?: string;
+  locationId?: string;
   batchCode?: string;
   serialCodes?: string[];
 }
@@ -176,10 +189,13 @@ export class DeliveryService {
               lineId: line.id,
               quantityReceived: input.quantityReceived,
               quantityAccepted: input.quantityAccepted,
+              quantityQuarantined: input.quantityQuarantined,
+              quarantineReason: input.quarantineReason,
               quantityRejected: input.quantityRejected ?? 0,
               rejectReason: input.rejectReason,
               conditionNotes: input.conditionNotes,
               secondBatchDueOn: input.secondBatchDueOn,
+              locationId: input.locationId,
               batchCode: input.batchCode,
               serialCodes: input.serialCodes,
             },
@@ -225,18 +241,29 @@ export class DeliveryService {
       if (seen.has(line.id)) throw new ValidationFailedError(`Item ${line.line_number} appears twice on this delivery.`);
       seen.add(line.id);
       const label = `Item ${line.line_number}`;
-      if (item.quantityAccepted < 0 || item.quantityReceived < 0 || item.quantityRejected < 0) {
+      const quarantined = item.quantityQuarantined ?? 0;
+      if (item.quantityAccepted < 0 || item.quantityReceived < 0 || item.quantityRejected < 0 || quarantined < 0) {
         throw new ValidationFailedError(`${label}: quantities cannot be negative.`);
       }
-      if (item.quantityReceived === 0 && item.quantityAccepted === 0 && item.quantityRejected === 0) continue;
-      if (opts.strictSplit && item.quantityAccepted + item.quantityRejected !== item.quantityReceived) {
-        throw new ValidationFailedError(`${label}: accepted plus rejected must equal the quantity received.`);
+      if (
+        item.quantityReceived === 0 &&
+        item.quantityAccepted === 0 &&
+        item.quantityRejected === 0 &&
+        quarantined === 0
+      ) {
+        continue;
       }
-      if (item.quantityAccepted + item.quantityRejected > item.quantityReceived) {
+      const split = item.quantityAccepted + quarantined + item.quantityRejected;
+      if (opts.strictSplit && split !== item.quantityReceived) {
+        throw new ValidationFailedError(
+          `${label}: accepted, quarantined and rejected must add up to the quantity received.`,
+        );
+      }
+      if (split > item.quantityReceived) {
         throw new ValidationFailedError(
           input.items.length === 1
-            ? 'Accepted plus rejected cannot exceed received.'
-            : `${label}: accepted plus rejected cannot exceed received.`,
+            ? 'Accepted, quarantined and rejected cannot exceed received.'
+            : `${label}: accepted, quarantined and rejected cannot exceed received.`,
         );
       }
       if (item.quantityRejected > 0 && !item.rejectReason?.trim()) {
@@ -246,8 +273,15 @@ export class DeliveryService {
             : `${label}: a reason is required when any quantity is rejected.`,
         );
       }
+      if (quarantined > 0 && !item.quarantineReason?.trim()) {
+        throw new ValidationFailedError(
+          input.items.length === 1
+            ? 'A reason is required when any quantity is quarantined.'
+            : `${label}: a reason is required when any quantity is quarantined.`,
+        );
+      }
       const acceptedBefore = await this.acceptedOnLine(tx, row.id, line.id);
-      if (item.quantityAccepted + acceptedBefore > line.quantity) {
+      if (item.quantityAccepted + quarantined + acceptedBefore > line.quantity) {
         throw new ValidationFailedError(
           input.items.length === 1
             ? 'Accepted quantity exceeds outstanding on this line.'
@@ -294,7 +328,8 @@ export class DeliveryService {
 
     const summaries: string[] = [];
     for (const { input: item, line, acceptedBefore } of items) {
-      if (item.quantityAccepted + acceptedBefore < line.quantity) {
+      const quarantined = item.quantityQuarantined ?? 0;
+      if (item.quantityAccepted + quarantined + acceptedBefore < line.quantity) {
         await this.ensureShortageDeadline(tx, actor, {
           requestId: row.id,
           lineId: line.id,
@@ -308,8 +343,9 @@ export class DeliveryService {
         `INSERT INTO procurement_goods_receipts (
            reference_number, request_id, version_id, entity_id, line_id, delivery_id, received_date, location,
            quantity_ordered, quantity_received, quantity_accepted, quantity_rejected,
-           reject_reason, condition_notes, idempotency_key, created_by
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+           reject_reason, condition_notes, idempotency_key, created_by,
+           quantity_quarantined, quarantine_reason, warehouse_id, location_id, batch_code
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
          RETURNING id`,
         [
           reference,
@@ -328,13 +364,18 @@ export class DeliveryService {
           item.conditionNotes?.trim() || null,
           `${input.idempotencyKey}:${line.line_number}`,
           actor.ref,
+          quarantined,
+          quarantined > 0 ? item.quarantineReason!.trim() : null,
+          item.warehouseId ?? input.warehouseId ?? null,
+          item.locationId ?? null,
+          item.batchCode?.trim() || null,
         ],
       );
       const grnId = inserted.rows[0]?.id;
       if (!grnId) throw new Error('The GRN was not recorded.');
       await this.inventory?.applyReceiptInTx(tx, actor, {
         grnId,
-        warehouseId: input.warehouseId ?? null,
+        warehouseId: item.warehouseId ?? input.warehouseId ?? null,
         batchCode: item.batchCode ?? null,
         serialCodes: item.serialCodes,
       });
@@ -360,6 +401,7 @@ export class DeliveryService {
           deliveryId,
           lineId: line.id,
           quantityAccepted: String(item.quantityAccepted),
+          quantityQuarantined: String(quarantined),
           quantityRejected: String(item.quantityRejected),
           warehouseId: input.warehouseId ?? null,
           batchCode: item.batchCode ?? null,
@@ -371,6 +413,7 @@ export class DeliveryService {
       });
       summaries.push(
         `item ${line.line_number} accepted ${item.quantityAccepted} of ${line.quantity}` +
+          (quarantined > 0 ? ` (${quarantined} quarantined for QC)` : '') +
           (item.quantityRejected > 0 ? ` (${item.quantityRejected} rejected)` : ''),
       );
     }
@@ -407,6 +450,7 @@ export class DeliveryService {
           line: line.line_number,
           received: item.quantityReceived,
           accepted: item.quantityAccepted,
+          quarantined: item.quantityQuarantined ?? 0,
           rejected: item.quantityRejected,
         })),
       },
@@ -417,16 +461,17 @@ export class DeliveryService {
         throw new ValidationFailedError(`Attach one of: ${missing.join(', ')}.`);
       }
       const afterReceipt = await loadPaymentEligibility(tx, row.id);
-      if (afterReceipt.paymentComplete) {
-        return this.completeInTx(tx, actor, row.id, { skipPermission: true });
-      }
       const nextStatus = nextStatusAfterPayment(afterReceipt, row.status);
       await tx.client.query(`UPDATE procurement_requests SET status = $1, updated_by = $2 WHERE id = $3`, [
         nextStatus,
         actor.ref,
         row.id,
       ]);
-      await this.workflows.activatePaymentStageInTx(tx, actor, row.id);
+      if (nextStatus === 'AWAITING_COMPLETION') {
+        await this.notifyAwaitingCompletionInTx(tx, row.id);
+      } else {
+        await this.workflows.activatePaymentStageInTx(tx, actor, row.id);
+      }
     }
     return this.procurement.getInTx(tx, actor, row.id);
   }
@@ -445,6 +490,9 @@ export class DeliveryService {
     input: RecordReceiptInput & { reason: string },
   ): Promise<ProcurementView> {
     if (!input.reason.trim()) throw new ValidationFailedError('A reason is required to correct a GRN.');
+    if ((input.quantityQuarantined ?? 0) > 0 && !emptyToNull(input.quarantineReason)) {
+      throw new ValidationFailedError('A reason is required when any quantity is quarantined.');
+    }
     return this.unitOfWork.write(actor, async (tx) => {
       const row = await this.lockRequest(tx, actor, requestId, 'procurement.grn.record');
       const original = await tx.client.query<{ id: string; line_id: string | null }>(
@@ -462,8 +510,9 @@ export class DeliveryService {
         `INSERT INTO procurement_goods_receipts (
            reference_number, request_id, version_id, entity_id, line_id, received_date, location,
            quantity_ordered, quantity_received, quantity_accepted, quantity_rejected,
-           reject_reason, condition_notes, idempotency_key, supersedes_id, supersede_reason, created_by
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+           reject_reason, condition_notes, idempotency_key, supersedes_id, supersede_reason, created_by,
+           quantity_quarantined, quarantine_reason, warehouse_id, location_id, batch_code
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
          RETURNING id`,
         [
           reference,
@@ -483,6 +532,11 @@ export class DeliveryService {
           grnId,
           input.reason.trim(),
           actor.ref,
+          input.quantityQuarantined ?? 0,
+          (input.quantityQuarantined ?? 0) > 0 ? emptyToNull(input.quarantineReason) : null,
+          input.warehouseId ?? null,
+          input.locationId ?? null,
+          emptyToNull(input.batchCode),
         ],
       );
       const nextId = inserted.rows[0]?.id;
@@ -600,7 +654,7 @@ export class DeliveryService {
                JOIN procurement_versions v ON v.id = l.version_id
               WHERE v.request_id = r.id AND v.version_number = r.current_version
                 AND COALESCE(l.quantity, 0) > COALESCE((
-                  SELECT sum(g.quantity_accepted)
+                  SELECT sum(g.quantity_accepted + g.quantity_quarantined)
                     FROM procurement_goods_receipts g
                    WHERE g.request_id = r.id
                      AND coalesce(g.line_id, (
@@ -617,7 +671,7 @@ export class DeliveryService {
                JOIN procurement_versions v ON v.id = l.version_id
               WHERE v.request_id = r.id AND v.version_number = r.current_version
                 AND COALESCE(l.quantity, 0) > COALESCE((
-                  SELECT sum(g.quantity_accepted)
+                  SELECT sum(g.quantity_accepted + g.quantity_quarantined)
                     FROM procurement_goods_receipts g
                    WHERE g.request_id = r.id
                      AND coalesce(g.line_id, (
@@ -719,6 +773,45 @@ export class DeliveryService {
     return this.procurement.getInTx(tx, actor, requestId, { skipPermission: opts?.skipPermission });
   }
 
+  /** Delivered and paid: tell the requesting GM it is theirs to complete. */
+  async notifyAwaitingCompletionInTx(tx: TxScope, requestId: string): Promise<void> {
+    const request = await tx.client.query<{
+      reference_number: string;
+      entity_id: string;
+      originator_user_id: string | null;
+      title: string;
+    }>(
+      `SELECT r.reference_number, r.entity_id, r.originator_user_id, v.title
+         FROM procurement_requests r
+         JOIN procurement_versions v ON v.request_id = r.id AND v.version_number = r.current_version
+        WHERE r.id = $1`,
+      [requestId],
+    );
+    const row = request.rows[0];
+    if (!row?.originator_user_id) return;
+    await tx.publish({
+      eventType: 'procurement.awaiting_completion',
+      subjectType: 'PROCUREMENT',
+      subjectId: requestId,
+      entityId: row.entity_id,
+      payload: {
+        type: 'procurement.awaiting_completion',
+        reference: row.reference_number,
+        title: row.title,
+        recipientUserId: row.originator_user_id,
+        summary: 'Every item is delivered and paid. Confirm delivery to complete the procurement.',
+        href: `/procurement/${requestId}#delivery`,
+      },
+    });
+    await tx.appendTimeline({
+      subjectType: 'PROCUREMENT',
+      subjectId: requestId,
+      text: 'Delivered and paid. Awaiting completion by the requesting General Manager.',
+      href: `/procurement/${requestId}`,
+      entityId: row.entity_id,
+    });
+  }
+
   async complete(actor: ActorContext, requestId: string): Promise<ProcurementView> {
     return this.unitOfWork.write(actor, async (tx) => this.completeInTx(tx, actor, requestId));
   }
@@ -729,9 +822,14 @@ export class DeliveryService {
     requestId: string,
     opts?: { skipPermission?: boolean },
   ): Promise<ProcurementView> {
-    const row = await this.lockRequest(tx, actor, requestId, 'procurement.verify.delivery', opts);
+    const row = await this.lockRequest(tx, actor, requestId, 'procurement.complete', opts);
     if (row.status === 'COMPLETED') return this.procurement.getInTx(tx, actor, requestId);
-    const completable = ['AWAITING_DELIVERY', 'PARTIALLY_RECEIVED', 'AWAITING_PAYMENT'].includes(row.status);
+    if (!opts?.skipPermission && row.originator_user_id !== actor.ref) {
+      throw new ForbiddenError('Only the General Manager who raised this request can complete it.');
+    }
+    const completable = ['AWAITING_COMPLETION', 'AWAITING_DELIVERY', 'PARTIALLY_RECEIVED', 'AWAITING_PAYMENT'].includes(
+      row.status,
+    );
     if (!completable) {
       throw new ConflictError('This request is not awaiting completion.');
     }
@@ -767,22 +865,39 @@ export class DeliveryService {
       );
       const payment = paid.rows[0];
       if (payment && Number(payment.amount_kobo) > 0) {
-        let acceptedValueKobo = 0;
+        // Goods and equipment were capitalised at each GRN. Only service lines reclass on completion.
+        const categories = await tx.client.query<{ id: string; category_key: string | null; stocked: boolean }>(
+          `SELECT l.id, c.key AS category_key, coalesce(c.stock_item OR c.asset, false) AS stocked
+             FROM procurement_version_lines l
+             LEFT JOIN procurement_categories c ON c.id = l.category_id
+            WHERE l.version_id = $1`,
+          [row.version_id],
+        );
+        const byLine = new Map(categories.rows.map((entry) => [entry.id, entry]));
+        const serviceValue = new Map<string, number>();
         for (const line of row.lines) {
+          const meta = byLine.get(line.id);
+          if (meta?.stocked) continue;
           const acceptedQty = await this.acceptedOnLine(tx, row.id, line.id);
-          acceptedValueKobo += acceptedQty * line.unit_price_kobo;
+          const key = meta?.category_key ?? row.category_key ?? 'services';
+          serviceValue.set(key, (serviceValue.get(key) ?? 0) + acceptedQty * line.unit_price_kobo);
         }
-        const reclassKobo = acceptedValueKobo > 0 ? acceptedValueKobo : Number(payment.amount_kobo);
-        if (reclassKobo > 0) {
+        const anyStocked = categories.rows.some((entry) => entry.stocked);
+        if (!anyStocked && [...serviceValue.values()].every((value) => value <= 0)) {
+          serviceValue.set(row.category_key ?? 'services', Number(payment.amount_kobo));
+        }
+        for (const [categoryKey, amountKobo] of serviceValue) {
+          if (amountKobo <= 0) continue;
           await this.ledger.postProcurementReclass(tx, actor, {
             requestId: row.id,
             entityId: row.entity_id,
             vendorId: payment.vendor_id,
-            categoryKey: row.category_key ?? 'services',
-            amountKobo: reclassKobo,
+            categoryKey,
+            amountKobo,
             occurredOn: new Date().toISOString().slice(0, 10),
             narration: `Reclass ${row.reference_number} on completion`,
             budgetLineId: payment.budget_line_id,
+            keySuffix: serviceValue.size > 1 ? categoryKey : undefined,
           });
         }
       }
@@ -1125,6 +1240,7 @@ export class DeliveryService {
     permission:
       | 'procurement.verify.delivery'
       | 'procurement.grn.record'
+      | 'procurement.complete'
       | 'procurement.close_short.request'
       | 'procurement.shortage.override',
     opts?: { skipPermission?: boolean },
@@ -1218,7 +1334,7 @@ export class DeliveryService {
 
   private async acceptedOnLine(tx: TxScope, requestId: string, lineId: string): Promise<number> {
     const result = await tx.client.query<{ total: string }>(
-      `SELECT coalesce(sum(g.quantity_accepted), 0)::text AS total
+      `SELECT coalesce(sum(g.quantity_accepted + g.quantity_quarantined), 0)::text AS total
          FROM procurement_goods_receipts g
         WHERE g.request_id = $1
           AND coalesce(g.line_id, $2) = $2
@@ -1259,7 +1375,7 @@ export class DeliveryService {
 
   private async acceptedTotal(tx: TxScope, requestId: string): Promise<number> {
     const result = await tx.client.query<{ total: string }>(
-      `SELECT coalesce(sum(g.quantity_accepted), 0)::text AS total
+      `SELECT coalesce(sum(g.quantity_accepted + g.quantity_quarantined), 0)::text AS total
          FROM procurement_goods_receipts g
         WHERE g.request_id = $1
           AND NOT EXISTS (

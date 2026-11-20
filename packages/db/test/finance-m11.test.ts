@@ -347,7 +347,7 @@ describe('M11 finance 2', () => {
       ownerId: paid.id,
       file: { buffer: PNG, originalname: 'complete.png' },
     });
-    const completed = await delivery.recordReceipt(officer, paid.id, {
+    const received = await delivery.recordReceipt(officer, paid.id, {
       receivedDate: '2026-10-03',
       location: 'YFZ mill stores',
       quantityReceived: 1,
@@ -355,6 +355,8 @@ describe('M11 finance 2', () => {
       idempotencyKey: `m11-grn-${paid.id}`,
       documents: [{ documentId: cert.id, kind: 'completion_certificate' }],
     });
+    expect(received.status).toBe('AWAITING_COMPLETION');
+    const completed = await delivery.complete(musa, paid.id);
     expect(completed.status).toBe('COMPLETED');
 
     const reclass = await owner.query<{ source: string; debit_code: string; credit_code: string; debit: string; credit: string }>(

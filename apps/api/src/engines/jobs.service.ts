@@ -219,13 +219,7 @@ export class JobsService {
       return;
     }
     if (delivery.handlerKey === 'inventory.apply_expected') {
-      const lineId = typeof delivery.payload.lineId === 'string' ? delivery.payload.lineId : '';
-      if (!this.inventory || !delivery.entityId || !lineId || !delivery.subjectId) return;
-      await this.inventory.applyExpectedInTx(tx, actor, {
-        requestId: delivery.subjectId,
-        lineId,
-        entityId: delivery.entityId,
-      });
+      // Approved incoming is a forecast derived from procurement lines; it never writes a balance.
       return;
     }
     if (delivery.handlerKey === 'inventory.apply_receipt') {

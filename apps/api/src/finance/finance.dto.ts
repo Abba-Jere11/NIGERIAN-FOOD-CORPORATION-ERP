@@ -77,6 +77,7 @@ export const createJournalSchema = z.object({
       'INVENTORY_WRITE_OFF',
       'INVENTORY_ADJUSTMENT',
       'INVENTORY_TRANSFER',
+      'INVENTORY_RETURN',
       'PRODUCTION_WIP',
       'PRODUCTION_OUTPUT',
       'PRODUCTION_WASTE',

@@ -8,9 +8,9 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { apiFetch, ApiError } from '@/lib/api';
 import { workflowAction } from '../../../workflows/actions';
 import { InventoryForm } from '../../InventoryForm';
+import { DispatchForm } from '../../_components/DispatchForm';
 import {
   cancelSalesAction,
-  dispatchSalesAction,
   invoiceSalesAction,
   returnSalesAction,
   submitSalesAction,
@@ -33,7 +33,7 @@ export default async function SalesDetailPage({ params }: { params: Promise<{ id
     ? await apiFetch<WorkflowInstanceView>(`/api/workflows/${order.workflowInstanceId}`).catch(() => null)
     : null;
   const today = new Date().toISOString().slice(0, 10);
-  const firstOpen = order.lines.find((line) => line.dispatchedQty < line.quantity);
+  const openLines = order.lines.filter((line) => line.dispatchedQty < line.quantity);
   return (
     <>
       <PageHeader
@@ -108,29 +108,10 @@ export default async function SalesDetailPage({ params }: { params: Promise<{ id
       ) : null}
       {['RESERVED', 'PART_DISPATCHED'].includes(order.status) &&
       me.permissions.includes('sales.dispatch') &&
-      firstOpen ? (
+      openLines.length > 0 ? (
         <Surface className="mb-4">
-          <SurfaceHeader title="Dispatch" />
-          <InventoryForm
-            action={dispatchSalesAction}
-            submitLabel="Dispatch"
-            fields={[
-              { name: 'id', label: 'id', type: 'hidden', defaultValue: order.id },
-              { name: 'orderLineId', label: 'orderLineId', type: 'hidden', defaultValue: firstOpen.id },
-              { name: 'destination', label: 'Destination', required: true },
-              { name: 'vehicle', label: 'Vehicle' },
-              { name: 'driver', label: 'Driver' },
-              { name: 'occurredOn', label: 'Date', type: 'date', defaultValue: today, required: true },
-              {
-                name: 'quantity',
-                label: 'Quantity',
-                type: 'number',
-                required: true,
-                defaultValue: String(firstOpen.quantity - firstOpen.dispatchedQty),
-              },
-              { name: 'batchCode', label: 'Batch' },
-            ]}
-          />
+          <SurfaceHeader title="Dispatch" description="Outstanding lines are posted together." />
+          <DispatchForm orderId={order.id} lines={openLines} today={today} />
         </Surface>
       ) : null}
       {['DISPATCHED', 'PART_DISPATCHED'].includes(order.status) && me.permissions.includes('sales.invoice') ? (

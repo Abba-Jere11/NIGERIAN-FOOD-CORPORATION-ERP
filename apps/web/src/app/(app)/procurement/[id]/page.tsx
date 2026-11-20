@@ -5,6 +5,7 @@ import type {
   EdmsPackageView,
   FinancialCheckView,
   FundingSourceView,
+  InventoryItemListView,
   MeView,
   ProcurementCategoryView,
   ProcurementInvoiceStage,
@@ -40,7 +41,7 @@ import { acknowledgePaymentTimingAction, changePaymentTimingAction } from '../ac
 import { ApprovalActions } from '../ApprovalActions';
 import { CloseShortActions } from '../CloseShortActions';
 import { CommentForm } from '../CommentForm';
-import { DeliveryPanel, ShortageOverrideForm } from '../DeliveryPanel';
+import { CompleteProcurementForm, DeliveryPanel, ShortageOverrideForm } from '../DeliveryPanel';
 import { FinanceDecisionForm } from '../FinanceDecisionForm';
 import { InvoiceUploadForm } from '../InvoiceUploadForm';
 import { InvoiceVarianceDecision } from '../InvoiceVarianceDecision';
@@ -93,7 +94,14 @@ export default async function ProcurementDetailPage({ params }: { params: Promis
   const isDraft = canPrepare || isLegacyDraft;
   const canVerify =
     (request.status === 'AWAITING_DELIVERY' || request.status === 'PARTIALLY_RECEIVED') &&
-    me.permissions.includes('procurement.verify.delivery');
+    me.permissions.includes('procurement.grn.record');
+  const canComplete =
+    me.ref === request.originatorUserId &&
+    me.permissions.includes('procurement.complete') &&
+    (request.status === 'AWAITING_COMPLETION' ||
+      ((request.status === 'AWAITING_DELIVERY' || request.status === 'PARTIALLY_RECEIVED') &&
+        request.deliveryComplete &&
+        request.paymentComplete));
   const canPackage = me.permissions.includes('procurement.package.download');
   const canOverrideShortage = me.permissions.includes('procurement.shortage.override');
   const canPortal = me.permissions.includes('edms.portal.access');
@@ -134,6 +142,12 @@ export default async function ProcurementDetailPage({ params }: { params: Promis
           }).catch(() => [] as WarehouseView[])
         : Promise.resolve([] as WarehouseView[]),
     ]);
+  const stockItems =
+    isDraft && me.permissions.includes('inventory.view')
+      ? await apiFetch<InventoryItemListView[]>('/api/inventory/items', {
+          query: { entityId: request.entityId },
+        }).catch(() => [] as InventoryItemListView[])
+      : [];
   const canFinance = me.permissions.includes('procurement.review.finance');
   const canTransfer = me.permissions.includes('finance.funding.transfer.record');
   const canPay =
@@ -245,6 +259,7 @@ export default async function ProcurementDetailPage({ params }: { params: Promis
                   budgetLines={budgetLines}
                   projects={projects}
                   vendors={vendors}
+                  stockItems={stockItems}
                   prepareMode={canPrepare}
                 />
               ) : (
@@ -734,11 +749,22 @@ export default async function ProcurementDetailPage({ params }: { params: Promis
               </div>
             </Surface>
           ) : null}
-          {canVerify ? (
+          {canComplete ? (
             <Surface id="delivery">
               <SurfaceHeader
-                title="Delivery verification"
-                description="Enter the delivery details once, then verify each item. Completing the request needs delivery and payment."
+                title="Confirm delivery"
+                description="Every item is received and paid. Confirm delivery to complete this procurement."
+              />
+              <div className="px-4 py-3">
+                <CompleteProcurementForm request={request} />
+              </div>
+            </Surface>
+          ) : null}
+          {canVerify ? (
+            <Surface id={canComplete ? 'delivery-receipt' : 'delivery'}>
+              <SurfaceHeader
+                title="Goods received"
+                description="Record one goods received note per delivery: accepted, quarantined for QC, or rejected. The requesting GM completes the procurement."
               />
               <div className="px-4 py-3">
                 <p className="mb-3 text-[13px] text-ink-700">

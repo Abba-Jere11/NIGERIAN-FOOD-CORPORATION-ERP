@@ -21,6 +21,14 @@ export const createWarehouseSchema = z.object({
 });
 export type CreateWarehouseInput = z.infer<typeof createWarehouseSchema>;
 
+export const createLocationSchema = z.object({
+  entityId: z.string().uuid(),
+  warehouseId: z.string().uuid(),
+  code: z.string().trim().min(1).max(40),
+  name: z.string().trim().min(1).max(120),
+});
+export type CreateLocationInput = z.infer<typeof createLocationSchema>;
+
 export const createItemSchema = z.object({
   entityId: z.string().uuid(),
   code: z.string().trim().min(1).max(40),
@@ -49,6 +57,7 @@ export const issueSchema = z.object({
   destinationType: z.enum(['department', 'production', 'project']),
   destinationId: z.string().uuid().optional(),
   destinationLabel: z.string().trim().max(200).optional(),
+  recipientName: z.string().trim().max(200).optional(),
   reason: z.string().trim().min(1).max(2000),
   occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   idempotencyKey: z.string().trim().min(8).max(80),
@@ -91,18 +100,24 @@ export const receiveTransferSchema = z.object({
 });
 export type ReceiveTransferInput = z.infer<typeof receiveTransferSchema>;
 
+const stockStatusEnum = z.enum(['AVAILABLE', 'QUARANTINED', 'REJECTED']);
+
 export const adjustmentSchema = z.object({
   entityId: z.string().uuid(),
   warehouseId: z.string().uuid(),
-  kind: z.enum(['increase', 'decrease', 'damaged', 'expired', 'count_variance']),
+  kind: z.enum(['increase', 'decrease', 'damaged', 'expired', 'count_variance', 'disposal']),
   reason: z.string().trim().min(1).max(2000),
   evidenceDocumentId: z.string().uuid().optional(),
   occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  /** Required for increase / decrease / count_variance: the completed count the adjustment comes from. */
+  countId: z.string().uuid().optional(),
+  idempotencyKey: z.string().trim().min(8).max(80).optional(),
   lines: z
     .array(
       z.object({
         itemId: z.string().uuid(),
         quantity: z.coerce.number(),
+        stockStatus: stockStatusEnum.optional(),
         batchCode: z.string().trim().max(80).optional(),
         serialCode: z.string().trim().max(80).optional(),
       }),
@@ -110,6 +125,103 @@ export const adjustmentSchema = z.object({
     .min(1),
 });
 export type AdjustmentInput = z.infer<typeof adjustmentSchema>;
+
+export const qcDecisionSchema = z.object({
+  entityId: z.string().uuid(),
+  itemId: z.string().uuid(),
+  warehouseId: z.string().uuid(),
+  batchId: z.string().uuid().optional(),
+  serialId: z.string().uuid().optional(),
+  grnId: z.string().uuid().optional(),
+  productionOrderId: z.string().uuid().optional(),
+  returnId: z.string().uuid().optional(),
+  decision: z.enum(['RELEASE', 'REJECT']),
+  quantity: z.coerce.number().positive(),
+  reason: z.string().trim().min(1).max(2000),
+  documentId: z.string().uuid().optional(),
+  occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+export type QcDecisionInput = z.infer<typeof qcDecisionSchema>;
+
+export const stockReturnSchema = z.object({
+  entityId: z.string().uuid(),
+  warehouseId: z.string().uuid(),
+  kind: z.enum(['RECEIVE_RETURN', 'SUPPLIER_RETURN']),
+  vendorId: z.string().uuid().optional(),
+  grnId: z.string().uuid().optional(),
+  returnedByName: z.string().trim().max(200).optional(),
+  departmentLabel: z.string().trim().max(200).optional(),
+  reason: z.string().trim().min(1).max(2000),
+  occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  idempotencyKey: z.string().trim().min(8).max(80),
+  lines: z
+    .array(
+      z.object({
+        itemId: z.string().uuid(),
+        quantity: z.coerce.number().positive(),
+        /** Supplier returns only: which bucket the stock leaves from. */
+        fromStatus: z.enum(['QUARANTINED', 'REJECTED']).optional(),
+        batchCode: z.string().trim().max(80).optional(),
+        serialCode: z.string().trim().max(80).optional(),
+        issueId: z.string().uuid().optional(),
+        issueLineId: z.string().uuid().optional(),
+      }),
+    )
+    .min(1),
+});
+export type StockReturnInput = z.infer<typeof stockReturnSchema>;
+
+const assetCondition = z.enum(['new', 'good', 'fair', 'poor', 'damaged']);
+
+export const registerAssetSchema = z.object({
+  entityId: z.string().uuid(),
+  itemId: z.string().uuid(),
+  serialCode: z.string().trim().max(80).optional(),
+  warehouseId: z.string().uuid().optional(),
+  locationLabel: z.string().trim().max(200).optional(),
+  condition: assetCondition.default('good'),
+  costKobo: z.coerce.number().int().nonnegative().default(0),
+  acquiredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  photoDocumentId: z.string().uuid().optional(),
+});
+export type RegisterAssetInput = z.infer<typeof registerAssetSchema>;
+
+export const assetMoveSchema = z.object({
+  rowVersion: z.number().int().positive(),
+  kind: z.enum(['ASSIGNED', 'MOVED']),
+  departmentId: z.string().uuid().optional(),
+  departmentLabel: z.string().trim().max(200).optional(),
+  locationLabel: z.string().trim().max(200).optional(),
+  custodianName: z.string().trim().max(200).optional(),
+  condition: assetCondition.optional(),
+  reason: z.string().trim().min(1).max(2000),
+});
+export type AssetMoveInput = z.infer<typeof assetMoveSchema>;
+
+export const assetPhotoSchema = z.object({
+  rowVersion: z.number().int().positive(),
+  /** Omit or null to clear the photograph. */
+  documentId: z.string().uuid().nullable().optional(),
+});
+export type AssetPhotoInput = z.infer<typeof assetPhotoSchema>;
+
+export const updateBatchSchema = z.object({
+  manufacturedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  expiresOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+});
+export type UpdateBatchInput = z.infer<typeof updateBatchSchema>;
+
+export const assetDisposeSchema = z.object({
+  rowVersion: z.number().int().positive(),
+  reason: z.string().trim().min(1).max(2000),
+  evidenceDocumentId: z.string().uuid().optional(),
+  occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+export type AssetDisposeInput = z.infer<typeof assetDisposeSchema>;
+
+export const scanQuery = z.object({
+  code: z.string().trim().min(1).max(120),
+});
 
 export const createCountSchema = z.object({
   entityId: z.string().uuid(),
@@ -121,6 +233,7 @@ export type CreateCountInput = z.infer<typeof createCountSchema>;
 
 export const countLineSchema = z.object({
   countedQty: z.coerce.number().nonnegative(),
+  explanation: z.string().trim().max(2000).optional(),
 });
 export type CountLineInput = z.infer<typeof countLineSchema>;
 
@@ -131,6 +244,8 @@ export const createProductionSchema = z.object({
   warehouseId: z.string().uuid(),
   finishedItemId: z.string().uuid(),
   plannedOutputQty: z.coerce.number().positive(),
+  /** Inputs are scaled from the formula when given; otherwise they are listed. */
+  formulaId: z.string().uuid().optional(),
   inputs: z
     .array(
       z.object({
@@ -140,9 +255,33 @@ export const createProductionSchema = z.object({
         batchCode: z.string().trim().max(80).optional(),
       }),
     )
-    .min(1),
+    .default([]),
 });
 export type CreateProductionInput = z.infer<typeof createProductionSchema>;
+
+export const closeProductionSchema = z.object({
+  rowVersion: z.number().int().positive(),
+  note: z.string().trim().max(4000).optional(),
+});
+export type CloseProductionInput = z.infer<typeof closeProductionSchema>;
+
+export const createFormulaSchema = z.object({
+  entityId: z.string().uuid(),
+  code: z.string().trim().min(1).max(40),
+  name: z.string().trim().min(1).max(200),
+  finishedItemId: z.string().uuid(),
+  baseOutputQty: z.coerce.number().positive(),
+  lines: z
+    .array(
+      z.object({
+        itemId: z.string().uuid(),
+        kind: z.enum(['INPUT', 'BY_PRODUCT']).default('INPUT'),
+        quantity: z.coerce.number().positive(),
+      }),
+    )
+    .min(1),
+});
+export type CreateFormulaInput = z.infer<typeof createFormulaSchema>;
 
 export const startProductionSchema = z.object({
   rowVersion: z.number().int().positive(),

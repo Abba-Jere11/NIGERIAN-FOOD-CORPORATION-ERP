@@ -65,9 +65,14 @@ export default async function InventoryOverviewPage({
           href={withInvScope('/inventory/alerts', scope)}
         />
         <Kpi
-          label="Pending receipts"
+          label="Expected (forecast)"
           value={String(overview.expectedLines)}
           href={withInvScope('/inventory/expected', scope)}
+        />
+        <Kpi
+          label="Quarantined, awaiting QC"
+          value={String(overview.quarantinedLines)}
+          href={withInvScope('/inventory/qc', scope)}
         />
         <Kpi
           label="Reserved for sales"
@@ -89,6 +94,18 @@ export default async function InventoryOverviewPage({
           value={String(overview.openProductionOrders)}
           href={withInvScope('/inventory/production', scope)}
         />
+        <Kpi
+          label="Expired batches"
+          value={String(overview.expiredBatchCount)}
+          href={withInvScope('/inventory/batches', scope)}
+        />
+        {overview.nearExpiryBatchCount > 0 ? (
+          <Kpi
+            label="Near expiry"
+            value={String(overview.nearExpiryBatchCount)}
+            href={withInvScope('/inventory/batches', scope)}
+          />
+        ) : null}
       </div>
 
       {!resolved.consolidated && resolved.entityId ? (
@@ -99,10 +116,13 @@ export default async function InventoryOverviewPage({
               Add item
             </Link>
           ) : null}
-          <Link href={withInvScope('/inventory/expected', scope)} className="underline">
-            Expected stock
+          <Link href={withInvScope('/inventory/desk', scope)} className="underline">
+            Operations Desk
           </Link>
-          {me.permissions.includes('procurement.verify.delivery') ? (
+          <Link href={withInvScope('/inventory/expected', scope)} className="underline">
+            Expected (forecast)
+          </Link>
+          {me.permissions.includes('procurement.grn.record') ? (
             <Link href="/home/inventory/pending" className="underline">
               Verify delivery
             </Link>

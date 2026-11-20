@@ -96,6 +96,9 @@ function hrefFor(recordType: string, recordId: string): string | null {
   if (recordType === 'ITEM') return `/inventory/items/${recordId}`;
   if (recordType === 'STOCK_MOVEMENT') return `/inventory`;
   if (recordType === 'STOCK_TRANSFER') return `/inventory/transfers`;
+  if (recordType === 'ASSET') return `/inventory/assets/${recordId}`;
+  if (recordType === 'STOCK_ISSUE') return `/inventory/issues`;
+  if (recordType === 'STOCK_RETURN') return `/inventory/desk`;
   if (recordType === 'PRODUCTION_ORDER') return `/inventory/production/${recordId}`;
   if (recordType === 'SALES_ORDER') return `/inventory/sales/${recordId}`;
   if (recordType === 'SALES_DISPATCH') return `/inventory/sales/dispatches`;

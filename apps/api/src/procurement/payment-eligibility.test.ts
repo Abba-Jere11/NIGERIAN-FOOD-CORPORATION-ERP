@@ -88,4 +88,18 @@ describe('payment eligibility', () => {
     expect(closed.payableKobo).toBe(300_000);
     expect(nextStatusAfterPayment(closed, 'PARTIALLY_RECEIVED')).toBe('AWAITING_PAYMENT');
   });
+
+  it('waits for the requesting GM once delivered and paid', () => {
+    const done = eligibilityFromParts({
+      authorizedKobo: 400_000,
+      paidKobo: 400_000,
+      acceptedValueKobo: 400_000,
+      anyOutstanding: false,
+      timing: 'after_delivery',
+      fundingRoute: 'subsidiary_operating',
+      funded: false,
+      closeShortApproved: false,
+    });
+    expect(nextStatusAfterPayment(done, 'AWAITING_PAYMENT')).toBe('AWAITING_COMPLETION');
+  });
 });

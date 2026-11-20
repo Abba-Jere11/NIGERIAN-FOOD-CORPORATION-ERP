@@ -21,7 +21,7 @@ const MD_CARDS: Array<{ key: keyof OrgReportDashboardView; label: string; href: 
 ];
 
 const USER_CARDS: Array<{ key: keyof OrgReportDashboardView; label: string; href: string }> = [
-  { key: 'myReports', label: 'My reports', href: '/org-reports/mine' },
+  { key: 'myReports', label: 'Reports', href: '/org-reports/mine' },
   { key: 'receivedForInformation', label: 'Received for information', href: '/org-reports/information' },
   { key: 'assignedMinutes', label: 'Official minutes assigned to me', href: '/org-reports/minutes' },
   { key: 'responsesAwaitingSubmission', label: 'Responses awaiting submission', href: '/org-reports/minutes' },

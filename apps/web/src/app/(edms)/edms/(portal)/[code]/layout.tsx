@@ -36,6 +36,7 @@ export default async function EdmsEntityLayout({
       entities={gateway.entities}
       canUpload={me.permissions.includes('edms.upload')}
       canSearchAll={gateway.entities.length > 1}
+      canScan={me.permissions.includes('inventory.view')}
     >
       {children}
     </EdmsWorkspace>

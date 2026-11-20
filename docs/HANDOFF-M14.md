@@ -1,5 +1,7 @@
 # M14 — Inventory 2: production and sales
 
+> **Superseded in part by `HANDOFF-M13-addendum.md`.** Production roles, quarantined output, variance approval and sales-order creation changed under the inventory addendum. Read the addendum first.
+
 Companion to `HANDOFF-M1.md` through `HANDOFF-M13.md`.
 
 ## What shipped

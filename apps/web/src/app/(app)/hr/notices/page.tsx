@@ -16,7 +16,7 @@ export default async function HrNoticesPage() {
 
   return (
     <>
-      <PageHeader eyebrow="HR" title="Notices" description="Published notices notify people and appear on My workspace." />
+      <PageHeader eyebrow="HR" title="Notices" description="Published notices notify people and appear on the Workspace page." />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Surface>
           <SurfaceHeader title="Publish" description="Audience is everyone until company policy narrows it." />

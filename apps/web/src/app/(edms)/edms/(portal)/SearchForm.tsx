@@ -39,7 +39,7 @@ export function SearchForm({
       {canSearchAll ? (
         <label className="flex items-center gap-1.5 pb-1.5 text-[12px] text-ink-700">
           <input type="checkbox" name="all" value="1" defaultChecked={params.get('all') === '1'} />
-          All my subsidiaries
+          All subsidiaries
         </label>
       ) : null}
       <Button type="submit" size="sm" variant="secondary">

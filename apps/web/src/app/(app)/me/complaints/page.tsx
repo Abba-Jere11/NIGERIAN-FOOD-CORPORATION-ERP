@@ -18,7 +18,7 @@ export default async function ComplaintsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="My workspace"
+        eyebrow="Workspace"
         title="Contact HR"
         description="Signed-in only. Tick anonymous if HR should not see your name on the complaint."
       />

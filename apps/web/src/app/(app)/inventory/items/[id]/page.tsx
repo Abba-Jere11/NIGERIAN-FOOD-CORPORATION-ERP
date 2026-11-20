@@ -49,6 +49,22 @@ export default async function InventoryItemDetailPage({
             <dd>
               {item.availableQty} {item.uomCode}
             </dd>
+            <dt className="text-ink-500">Quarantined</dt>
+            <dd>
+              {item.quarantinedQty} {item.uomCode}
+            </dd>
+            <dt className="text-ink-500">WIP</dt>
+            <dd>
+              {item.wipQty} {item.uomCode}
+            </dd>
+            <dt className="text-ink-500">Rejected</dt>
+            <dd>
+              {item.rejectedQty} {item.uomCode}
+            </dd>
+            <dt className="text-ink-500">Expected (forecast)</dt>
+            <dd>
+              {item.incomingQty} {item.uomCode}
+            </dd>
             <dt className="text-ink-500">Value</dt>
             <dd>{formatKobo(BigInt(item.onHandValueKobo))}</dd>
             <dt className="text-ink-500">Status</dt>
@@ -82,12 +98,27 @@ export default async function InventoryItemDetailPage({
           <Surface padded={false}>
             <SurfaceHeader title="On hand by batch" />
             <table className="w-full text-left text-[13px]">
+              <thead className="border-b border-ink-200 text-[11px] uppercase tracking-wider text-ink-500">
+                <tr>
+                  <th className="px-4 py-2">Batch</th>
+                  <th className="px-4 py-2">Warehouse</th>
+                  <th className="px-4 py-2">Manufactured</th>
+                  <th className="px-4 py-2">Expires</th>
+                  <th className="px-4 py-2 text-right">Qty</th>
+                </tr>
+              </thead>
               <tbody>
                 {item.batches.map((row) => (
                   <tr key={row.id} className="border-b border-ink-100">
                     <td className="px-4 py-2">{row.batchCode}</td>
                     <td className="px-4 py-2">{row.warehouseName}</td>
-                    <td className="tabular px-4 py-2">{row.qty}</td>
+                    <td className="px-4 py-2">{row.manufacturedOn ?? '—'}</td>
+                    <td className="px-4 py-2">
+                      {row.expiresOn ?? '—'}
+                      {row.expiryStatus === 'expired' ? ' · expired' : ''}
+                      {row.expiryStatus === 'near' ? ' · near expiry' : ''}
+                    </td>
+                    <td className="tabular px-4 py-2 text-right">{row.qty}</td>
                   </tr>
                 ))}
               </tbody>

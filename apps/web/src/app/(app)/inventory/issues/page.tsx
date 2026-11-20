@@ -1,6 +1,5 @@
 import type {
   InventoryContextView,
-  InventoryItemListView,
   MeView,
   StockIssueView,
   WarehouseView,
@@ -8,7 +7,7 @@ import type {
 import { PageHeader, Surface, SurfaceHeader } from '@/components/ui/Surface';
 import { EmptyState } from '@/components/ui/States';
 import { apiFetch } from '@/lib/api';
-import { InventoryForm } from '../InventoryForm';
+import { SmartStockForm } from '../_components/DeskWidgets';
 import { issueAction } from '../actions';
 import { inventoryApiQuery, resolveInventoryScope } from '../scope';
 
@@ -27,25 +26,22 @@ export default async function InventoryIssuesPage({
   ]);
   const resolved = resolveInventoryScope(context, query.scope);
   const queryParams = inventoryApiQuery(resolved);
-  const [rows, items, warehouses] =
+  const [rows, warehouses] =
     resolved.consolidated || resolved.entityId
       ? await Promise.all([
           apiFetch<StockIssueView[]>('/api/inventory/issues', { query: queryParams }),
           resolved.entityId
-            ? apiFetch<InventoryItemListView[]>('/api/inventory/items', { query: { entityId: resolved.entityId } })
-            : Promise.resolve([] as InventoryItemListView[]),
-          resolved.entityId
             ? apiFetch<WarehouseView[]>('/api/inventory/warehouses', { query: { entityId: resolved.entityId } })
             : Promise.resolve([] as WarehouseView[]),
         ])
-      : [[], [], []];
+      : [[], []];
   const today = new Date().toISOString().slice(0, 10);
   return (
     <>
       <PageHeader
         eyebrow="Inventory"
         title="Issues"
-        description="Officer issues with a mandatory reason. Destination type is enough; production orders are M14."
+        description="Issue available stock with a reason (ISS-). Issues post immediately unless their value reaches the Lane B threshold, which then needs ED Operations and ED Finance approval. Quarantined stock cannot be issued."
       />
       <Surface padded={false}>
         <SurfaceHeader title={resolved.label} />
@@ -58,7 +54,10 @@ export default async function InventoryIssuesPage({
                 <th className="px-4 py-2">Reference</th>
                 <th className="px-4 py-2">Warehouse</th>
                 <th className="px-4 py-2">Destination</th>
+                <th className="px-4 py-2">Items</th>
+                <th className="px-4 py-2">Recipient</th>
                 <th className="px-4 py-2">Reason</th>
+                <th className="px-4 py-2">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -70,7 +69,10 @@ export default async function InventoryIssuesPage({
                     {row.destinationType}
                     {row.destinationLabel ? ` · ${row.destinationLabel}` : ''}
                   </td>
+                  <td className="px-4 py-2">{row.lines.map((line) => `${line.itemCode} × ${line.quantity}`).join(', ')}</td>
+                  <td className="px-4 py-2">{row.recipientName ?? '—'}</td>
                   <td className="px-4 py-2">{row.reason}</td>
+                  <td className="px-4 py-2">{row.status === 'PENDING_APPROVAL' ? 'Awaiting approval' : row.status.replaceAll('_', ' ').toLowerCase()}</td>
                 </tr>
               ))}
             </tbody>
@@ -80,40 +82,42 @@ export default async function InventoryIssuesPage({
       {me.permissions.includes('inventory.issue') && resolved.entityId ? (
         <Surface className="mt-4">
           <SurfaceHeader title="Issue stock" />
-          <InventoryForm
+          <SmartStockForm
             action={issueAction}
             entityId={resolved.entityId}
-            submitLabel="Issue"
-            fields={[
-              {
-                name: 'warehouseId',
-                label: 'Warehouse',
-                required: true,
-                options: warehouses.map((row) => ({ value: row.id, label: row.name })),
-              },
-              {
-                name: 'itemId',
-                label: 'Item',
-                required: true,
-                options: items.map((row) => ({ value: row.id, label: `${row.code} — ${row.name}` })),
-              },
-              { name: 'quantity', label: 'Quantity', type: 'number', required: true },
-              { name: 'batchCode', label: 'Batch (if tracked)' },
-              { name: 'serialCode', label: 'Serial (if tracked)' },
-              {
-                name: 'destinationType',
-                label: 'Destination',
-                required: true,
-                options: [
-                  { value: 'department', label: 'Department' },
-                  { value: 'project', label: 'Project' },
-                  { value: 'production', label: 'Production' },
-                ],
-              },
-              { name: 'destinationLabel', label: 'Destination label' },
-              { name: 'reason', label: 'Reason', required: true },
-              { name: 'occurredOn', label: 'Date', type: 'date', required: true, defaultValue: today },
-            ]}
+            warehouses={warehouses}
+            submitLabel="Review Issue"
+            reviewKind="issue"
+            extraFields={
+              <>
+                <label className="block text-[13px]">
+                  <span className="font-semibold text-ink-700">Destination</span>
+                  <select name="destinationType" required className="mt-1 block w-full border border-ink-300 bg-surface px-2 py-1.5" defaultValue="department">
+                    <option value="department">Department</option>
+                    <option value="project">Project</option>
+                  </select>
+                </label>
+                <p className="text-[12px] text-ink-600">
+                  Production issues are raised from a production order, not here.
+                </p>
+                <label className="block text-[13px]">
+                  <span className="font-semibold text-ink-700">Destination label</span>
+                  <input name="destinationLabel" className="mt-1 block w-full border border-ink-300 px-2 py-1.5" />
+                </label>
+                <label className="block text-[13px]">
+                  <span className="font-semibold text-ink-700">Received by</span>
+                  <input name="recipientName" className="mt-1 block w-full border border-ink-300 px-2 py-1.5" />
+                </label>
+                <label className="block text-[13px]">
+                  <span className="font-semibold text-ink-700">Reason</span>
+                  <input name="reason" required className="mt-1 block w-full border border-ink-300 px-2 py-1.5" />
+                </label>
+                <label className="block text-[13px]">
+                  <span className="font-semibold text-ink-700">Date</span>
+                  <input name="occurredOn" type="date" required defaultValue={today} className="mt-1 block w-full border border-ink-300 px-2 py-1.5" />
+                </label>
+              </>
+            }
           />
         </Surface>
       ) : null}

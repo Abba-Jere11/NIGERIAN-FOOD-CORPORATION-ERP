@@ -1,6 +1,6 @@
 import { Inject, Injectable, Optional, forwardRef } from '@nestjs/common';
 import type { ActorContext } from '@nfc/db';
-import type { ProductionOrderStatus, ProductionOrderView } from '@nfc/shared';
+import type { ProductionFormulaView, ProductionOrderStatus, ProductionOrderView } from '@nfc/shared';
 import { assertCan, can } from '../auth/can';
 import {
   ConflictError,
@@ -14,7 +14,9 @@ import { UnitOfWork } from '../database/unit-of-work';
 import { WorkflowsService } from '../workflows/workflows.service';
 import type {
   CancelProductionInput,
+  CloseProductionInput,
   CompleteProductionInput,
+  CreateFormulaInput,
   CreateProductionInput,
   StartProductionInput,
 } from './inventory.dto';
@@ -51,14 +53,28 @@ export class ProductionService {
     assertCan(actor, 'production.create', input.entityId);
     const id = await this.unitOfWork.write(actor, async (tx) => {
       const finished = await this.requireItem(tx, input.finishedItemId, input.entityId);
+      const inputs = input.formulaId
+        ? await this.scaledFormulaInputs(tx, input.formulaId, input)
+        : input.inputs;
+      if (inputs.length === 0) {
+        throw new ValidationFailedError('List the raw materials or choose a formula.');
+      }
       const ref = await this.inventory.nextRef(tx, 'PRD');
       const inserted = await tx.client.query<{ id: string }>(
         `INSERT INTO production_orders (
            reference_number, entity_id, warehouse_id, finished_item_id, planned_output_qty,
-           created_by, updated_by
-         ) VALUES ($1, $2, $3, $4, $5, $6, $6)
+           formula_id, created_by, updated_by
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
          RETURNING id`,
-        [ref, input.entityId, input.warehouseId, input.finishedItemId, input.plannedOutputQty, actor.ref],
+        [
+          ref,
+          input.entityId,
+          input.warehouseId,
+          input.finishedItemId,
+          input.plannedOutputQty,
+          input.formulaId ?? null,
+          actor.ref,
+        ],
       );
       const orderId = inserted.rows[0]?.id;
       if (!orderId) throw new Error('The production order was not created.');
@@ -68,7 +84,7 @@ export class ProductionService {
          ) VALUES ($1, $2, $3, $4, $5, $6, $6)`,
         [orderId, input.entityId, input.finishedItemId, input.warehouseId, input.plannedOutputQty, actor.ref],
       );
-      for (const line of input.inputs) {
+      for (const line of inputs) {
         await this.requireItem(tx, line.itemId, input.entityId);
         const warehouseId = line.warehouseId ?? input.warehouseId;
         let batchId: string | null = null;
@@ -112,7 +128,7 @@ export class ProductionService {
   async start(actor: ActorContext, id: string, input: StartProductionInput): Promise<ProductionOrderView> {
     await this.unitOfWork.write(actor, async (tx) => {
       const current = await this.lock(tx, id);
-      assertCan(actor, 'production.create', current.entity_id);
+      assertCan(actor, 'production.complete', current.entity_id);
       this.assertVersion(current.row_version, input.rowVersion);
       if (current.status !== 'PLANNED') {
         throw new ConflictError('Only a planned production order can be started.');
@@ -212,15 +228,25 @@ export class ProductionService {
       if (input.wasteQty > 0 && !input.wasteReason?.trim()) {
         throw new ValidationFailedError('A reason is required when recording waste.');
       }
-      const instance = await this.workflows?.startProductionCompleteInTx(tx, actor, { orderId: id });
+      const planned = Number(current.planned_output_qty);
+      const varianceBps =
+        planned > 0 ? Math.round((Math.abs(input.actualOutputQty - planned) / planned) * 10_000) : 0;
+      let escalate = false;
+      if (varianceBps > 0) {
+        const tolerance = await this.inventory.requireSetting(
+          tx,
+          'production_variance_tolerance_bps',
+          'Recording output that differs from the plan',
+        );
+        escalate = varianceBps > tolerance;
+      }
       await tx.client.query(
         `UPDATE production_orders
             SET actual_output_qty = $1,
                 waste_qty = $2,
                 waste_reason = $3,
                 produced_on = $4,
-                status = 'AWAITING_APPROVAL',
-                workflow_instance_id = $5,
+                variance_bps = $5,
                 updated_by = $6
           WHERE id = $7`,
         [
@@ -228,7 +254,7 @@ export class ProductionService {
           input.wasteQty,
           input.wasteReason?.trim() || null,
           input.producedOn,
-          instance?.id ?? null,
+          varianceBps,
           actor.ref,
           id,
         ],
@@ -262,8 +288,191 @@ export class ProductionService {
         `UPDATE production_order_outputs SET batch_id = $1, updated_by = $2 WHERE order_id = $3`,
         [batchId, actor.ref, id],
       );
+      if (escalate) {
+        const instance = await this.workflows?.startProductionCompleteInTx(tx, actor, { orderId: id });
+        await tx.client.query(
+          `UPDATE production_orders
+              SET status = 'AWAITING_APPROVAL', workflow_instance_id = $1, updated_by = $2
+            WHERE id = $3`,
+          [instance?.id ?? null, actor.ref, id],
+        );
+      } else {
+        await this.finishInTx(tx, actor, id);
+      }
     });
     return this.get(actor, id);
+  }
+
+  /** GM closes a completed order; any variance must be explained. */
+  async close(actor: ActorContext, id: string, input: CloseProductionInput): Promise<ProductionOrderView> {
+    await this.unitOfWork.write(actor, async (tx) => {
+      const current = await this.lock(tx, id);
+      assertCan(actor, 'production.create', current.entity_id);
+      this.assertVersion(current.row_version, input.rowVersion);
+      if (current.status !== 'COMPLETED') {
+        throw new ConflictError('Only a completed production order can be closed.');
+      }
+      const note = input.note?.trim() || null;
+      if ((Number(current.variance_bps ?? 0) > 0 || Number(current.waste_qty) > 0) && !note) {
+        throw new ValidationFailedError('Explain the variance or waste before closing this order.');
+      }
+      await tx.client.query(
+        `UPDATE production_orders
+            SET status = 'CLOSED', close_note = $1, closed_at = now(), closed_by = $2, updated_by = $2
+          WHERE id = $3`,
+        [note, actor.ref, id],
+      );
+      await tx.audit({
+        action: 'edit',
+        subjectType: 'production_order',
+        subjectId: id,
+        subjectLabel: current.reference_number,
+        subjectReferenceNumber: current.reference_number,
+        entityId: current.entity_id,
+        oldValue: { status: 'COMPLETED' },
+        newValue: { status: 'CLOSED', note },
+      });
+    });
+    return this.get(actor, id);
+  }
+
+  async listFormulas(actor: ActorContext, entityId?: string): Promise<ProductionFormulaView[]> {
+    const scoped = this.inventory.assertListScope(actor, entityId, 'sales.view');
+    return this.unitOfWork.read(actor, async (tx) => {
+      const rows = await tx.client.query<{
+        id: string;
+        entity_id: string;
+        code: string;
+        name: string;
+        version: number;
+        finished_item_id: string;
+        finished_item_code: string;
+        finished_item_name: string;
+        base_output_qty: string;
+        tolerance_bps: number | null;
+        status: 'ACTIVE' | 'RETIRED';
+      }>(
+        `SELECT f.id, f.entity_id, f.code, f.name, f.version, f.finished_item_id,
+                i.code AS finished_item_code, i.name AS finished_item_name, f.base_output_qty::text, f.tolerance_bps, f.status
+           FROM production_formulas f
+           JOIN inventory_items i ON i.id = f.finished_item_id
+          WHERE ($1::uuid IS NULL OR f.entity_id = $1)
+          ORDER BY f.code, f.version DESC`,
+        [scoped],
+      );
+      const lines = await tx.client.query<{
+        formula_id: string;
+        item_id: string;
+        item_code: string;
+        item_name: string;
+        line_kind: 'INPUT' | 'BY_PRODUCT';
+        quantity: string;
+      }>(
+        `SELECT l.formula_id, l.item_id, i.code AS item_code, i.name AS item_name, l.line_kind, l.quantity::text
+           FROM production_formula_lines l
+           JOIN inventory_items i ON i.id = l.item_id
+          WHERE l.formula_id = ANY($1::uuid[])
+          ORDER BY l.created_at`,
+        [rows.rows.map((row) => row.id)],
+      );
+      return rows.rows.map((row) => ({
+        id: row.id,
+        entityId: row.entity_id,
+        code: row.code,
+        name: row.name,
+        version: row.version,
+        finishedItemId: row.finished_item_id,
+        finishedItemCode: row.finished_item_code,
+        finishedItemName: row.finished_item_name,
+        baseOutputQty: Number(row.base_output_qty),
+        toleranceBps: row.tolerance_bps,
+        status: row.status,
+        lines: lines.rows
+          .filter((line) => line.formula_id === row.id)
+          .map((line) => ({
+            itemId: line.item_id,
+            itemCode: line.item_code,
+            itemName: line.item_name,
+            lineKind: line.line_kind,
+            quantity: Number(line.quantity),
+          })),
+      }));
+    });
+  }
+
+  /** A new code starts at version 1; saving an existing code adds the next version. */
+  async createFormula(actor: ActorContext, input: CreateFormulaInput): Promise<ProductionFormulaView[]> {
+    assertCan(actor, 'production.create', input.entityId);
+    await this.unitOfWork.write(actor, async (tx) => {
+      await this.requireItem(tx, input.finishedItemId, input.entityId);
+      for (const line of input.lines) await this.requireItem(tx, line.itemId, input.entityId);
+      const code = input.code.trim().toUpperCase();
+      const previous = await tx.client.query<{ version: number }>(
+        `SELECT coalesce(max(version), 0)::int AS version FROM production_formulas WHERE entity_id = $1 AND code = $2`,
+        [input.entityId, code],
+      );
+      const version = (previous.rows[0]?.version ?? 0) + 1;
+      await tx.client.query(
+        `UPDATE production_formulas SET status = 'RETIRED', updated_by = $1
+          WHERE entity_id = $2 AND code = $3 AND status = 'ACTIVE'`,
+        [actor.ref, input.entityId, code],
+      );
+      const inserted = await tx.client.query<{ id: string }>(
+        `INSERT INTO production_formulas (
+           entity_id, code, name, version, finished_item_id, base_output_qty, created_by, updated_by
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+         RETURNING id`,
+        [input.entityId, code, input.name.trim(), version, input.finishedItemId, input.baseOutputQty, actor.ref],
+      );
+      const formulaId = inserted.rows[0]!.id;
+      for (const line of input.lines) {
+        await tx.client.query(
+          `INSERT INTO production_formula_lines (formula_id, entity_id, item_id, line_kind, quantity, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [formulaId, input.entityId, line.itemId, line.kind, line.quantity, actor.ref],
+        );
+      }
+      await tx.audit({
+        action: 'create',
+        subjectType: 'production_formula',
+        subjectId: formulaId,
+        subjectLabel: `${code} v${version}`,
+        subjectReferenceNumber: code,
+        entityId: input.entityId,
+        newValue: { code, version, baseOutputQty: input.baseOutputQty, lines: input.lines },
+      });
+    });
+    return this.listFormulas(actor, input.entityId);
+  }
+
+  private async scaledFormulaInputs(
+    tx: TxScope,
+    formulaId: string,
+    input: { entityId: string; warehouseId: string; finishedItemId: string; plannedOutputQty: number },
+  ): Promise<Array<{ itemId: string; warehouseId?: string; plannedQty: number; batchCode?: string }>> {
+    const formula = await tx.client.query<{
+      entity_id: string;
+      finished_item_id: string;
+      base_output_qty: string;
+      status: string;
+    }>(
+      `SELECT entity_id, finished_item_id, base_output_qty::text, status FROM production_formulas WHERE id = $1`,
+      [formulaId],
+    );
+    const row = formula.rows[0];
+    if (!row || row.entity_id !== input.entityId || row.finished_item_id !== input.finishedItemId) {
+      throw new ValidationFailedError('Choose a formula for this finished item in the same subsidiary.');
+    }
+    if (row.status !== 'ACTIVE') throw new ValidationFailedError('That formula has been retired.');
+    const factor = input.plannedOutputQty / Number(row.base_output_qty);
+    const lines = await tx.client.query<{ item_id: string; quantity: string }>(
+      `SELECT item_id, quantity::text FROM production_formula_lines WHERE formula_id = $1 AND line_kind = 'INPUT'`,
+      [formulaId],
+    );
+    return lines.rows.map((line) => ({
+      itemId: line.item_id,
+      plannedQty: Math.round(Number(line.quantity) * factor * 10_000) / 10_000,
+    }));
   }
 
   async cancel(actor: ActorContext, id: string, input: CancelProductionInput): Promise<ProductionOrderView> {
@@ -299,6 +508,12 @@ export class ProductionService {
     if (!can(actor, 'production.approve', current.entity_id)) {
       throw new ForbiddenError('You cannot approve this production order.');
     }
+    await this.finishInTx(tx, actor, orderId);
+  }
+
+  /** Post waste, overhead and finished goods. Output is quarantined until the GM releases it. */
+  private async finishInTx(tx: TxScope, actor: ActorContext, orderId: string): Promise<void> {
+    const current = await this.lock(tx, orderId);
     const inputs = await tx.client.query<{
       item_id: string;
       warehouse_id: string;
@@ -362,6 +577,7 @@ export class ProductionService {
       sourceId: orderId,
       occurredOn,
       notes: `Output ${current.reference_number}`,
+      stockStatus: 'QUARANTINED',
     });
     await this.inventory.postMovement(tx, actor, {
       movementId,
@@ -397,6 +613,19 @@ export class ProductionService {
         WHERE id = $3`,
       [yieldPct, actor.ref, orderId],
     );
+    await tx.publish({
+      eventType: 'inventory.qc.pending',
+      subjectType: 'INVENTORY',
+      subjectId: current.finished_item_id,
+      entityId: current.entity_id,
+      payload: {
+        type: 'inventory.qc.pending',
+        reference: current.reference_number,
+        title: `Production output ${current.reference_number}`,
+        summary: `${actualOutput} units await QC release.`,
+        href: '/inventory/qc',
+      },
+    });
   }
 
   async rejectInTx(tx: TxScope, actor: ActorContext, orderId: string): Promise<void> {
@@ -517,6 +746,10 @@ export class ProductionService {
       status: ProductionOrderStatus;
       cancel_reason: string | null;
       workflow_instance_id: string | null;
+      formula_id: string | null;
+      variance_bps: number | null;
+      close_note: string | null;
+      closed_at: Date | null;
       created_by: string;
       row_version: number;
     }>(
@@ -524,7 +757,8 @@ export class ProductionService {
               o.finished_item_id, i.code AS finished_item_code, i.name AS finished_item_name,
               o.planned_output_qty::text, o.actual_output_qty::text, o.waste_qty::text, o.waste_reason,
               o.yield_pct::text, o.finished_batch_id, b.batch_code AS finished_batch_code,
-              o.produced_on::text, o.status, o.cancel_reason, o.workflow_instance_id, o.created_by, o.row_version
+              o.produced_on::text, o.status, o.cancel_reason, o.workflow_instance_id, o.created_by, o.row_version,
+              o.formula_id, o.variance_bps, o.close_note, o.closed_at
          FROM production_orders o
          JOIN entities e ON e.id = o.entity_id
          JOIN warehouses w ON w.id = o.warehouse_id
@@ -570,6 +804,10 @@ export class ProductionService {
       status: row.status,
       cancelReason: row.cancel_reason,
       workflowInstanceId: row.workflow_instance_id,
+      formulaId: row.formula_id,
+      varianceBps: row.variance_bps,
+      closeNote: row.close_note,
+      closedAt: row.closed_at ? row.closed_at.toISOString() : null,
       createdBy: row.created_by,
       rowVersion: row.row_version,
       inputs,
@@ -634,12 +872,13 @@ export class ProductionService {
       produced_on: string | null;
       finished_batch_id: string | null;
       status: string;
+      variance_bps: number | null;
       created_by: string;
       row_version: number;
     }>(
       `SELECT id, reference_number, entity_id, warehouse_id, finished_item_id, planned_output_qty::text,
               actual_output_qty::text, waste_qty::text, produced_on::text, finished_batch_id, status,
-              created_by, row_version
+              variance_bps, created_by, row_version
          FROM production_orders WHERE id = $1 FOR UPDATE`,
       [id],
     );

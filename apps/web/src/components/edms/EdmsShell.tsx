@@ -3,6 +3,7 @@ import Link from 'next/link';
 import type { MeView } from '@nfc/shared';
 import { ORGANIZATION_NAME } from '@nfc/shared';
 import { NfcLogo } from '@/components/brand/NfcLogo';
+import { ScanIconLink } from '@/components/shell/ScanIconLink';
 import { logoutEdmsAction } from '@/lib/auth-actions';
 
 export function EdmsShell({
@@ -45,6 +46,7 @@ export function EdmsShell({
             ) : null}
           </nav>
           <div className="ml-auto flex items-center gap-3 text-white">
+            {me.permissions.includes('inventory.view') ? <ScanIconLink /> : null}
             <span className="hidden text-right leading-tight sm:block">
               <span className="block text-[12px] font-medium">{me.name}</span>
               <span className="block text-[10px] text-white/70">{me.roleShortName ?? me.position}</span>

@@ -10,7 +10,9 @@ import {
   EDMS_DOCUMENT_WORKFLOW_KEY,
   EXPENSE_WORKFLOW_KEY,
   INCOME_WORKFLOW_KEY,
+  INVENTORY_ADJUST_FINANCE_WORKFLOW_KEY,
   INVENTORY_ADJUST_WORKFLOW_KEY,
+  INVENTORY_ISSUE_WORKFLOW_KEY,
   INVENTORY_TRANSFER_WORKFLOW_KEY,
   PRODUCTION_COMPLETE_WORKFLOW_KEY,
   SALES_ORDER_WORKFLOW_KEY,
@@ -454,6 +456,7 @@ export class WorkflowsService {
       await this.applyBillOutcome(tx, actor, instance, action, next.status);
       await this.applyInventoryAdjustmentOutcome(tx, actor, instance, action, next.status);
       await this.applyInventoryTransferOutcome(tx, actor, instance, action, next.status);
+      await this.applyInventoryIssueOutcome(tx, actor, instance, action, next.status);
       await this.applyProductionOutcome(tx, actor, instance, action, next.status);
       await this.applySalesOrderOutcome(tx, actor, instance, action, next.status);
       await this.applyEdmsDocumentOutcome(tx, instance, action, next.status);
@@ -567,7 +570,7 @@ export class WorkflowsService {
       const found = await tx.client.query<{ id: string }>(
         `SELECT id FROM workflow_instances
           WHERE subject_id = $1
-            AND subject_type IN ('DEMO_PROCUREMENT', 'VENDOR', 'PROCUREMENT', 'CLOSE_SHORT', 'JOURNAL', 'BUDGET', 'INCOME', 'EXPENSE', 'BILL', 'INVENTORY_ADJUSTMENT', 'INVENTORY_TRANSFER', 'PRODUCTION_ORDER', 'SALES_ORDER', 'EDMS_DOCUMENT', 'HR_CHANGE', 'HR_LEAVE', 'HR_OVERTIME', 'HR_PERFORMANCE', 'HR_DISCIPLINARY', 'PAYROLL_RUN')
+            AND subject_type IN ('DEMO_PROCUREMENT', 'VENDOR', 'PROCUREMENT', 'CLOSE_SHORT', 'JOURNAL', 'BUDGET', 'INCOME', 'EXPENSE', 'BILL', 'INVENTORY_ADJUSTMENT', 'INVENTORY_TRANSFER', 'INVENTORY_ISSUE', 'PRODUCTION_ORDER', 'SALES_ORDER', 'EDMS_DOCUMENT', 'HR_CHANGE', 'HR_LEAVE', 'HR_OVERTIME', 'HR_PERFORMANCE', 'HR_DISCIPLINARY', 'PAYROLL_RUN')
           ORDER BY created_at DESC
           LIMIT 1`,
         [subjectId],
@@ -583,7 +586,7 @@ export class WorkflowsService {
       const result = await tx.client.query<InstanceRow>(
         `${this.instanceSelectSql({ archived: false })}
           WHERE i.status IN ('IN_PROGRESS', 'DRAFT')
-            AND (sub.id IS NOT NULL OR v.id IS NOT NULL OR pr.id IS NOT NULL OR cs.id IS NOT NULL OR jnl.id IS NOT NULL OR bud.id IS NOT NULL OR inc.id IS NOT NULL OR exp.id IS NOT NULL OR bill.id IS NOT NULL OR adj.id IS NOT NULL OR trf.id IS NOT NULL OR prd.id IS NOT NULL OR so.id IS NOT NULL OR edoc.id IS NOT NULL OR hrchg.id IS NOT NULL OR hrvac.id IS NOT NULL OR hroff.id IS NOT NULL OR hrlv.id IS NOT NULL OR hrot.id IS NOT NULL OR hrapp.id IS NOT NULL OR hrdisc.id IS NOT NULL OR prl.id IS NOT NULL)
+            AND (sub.id IS NOT NULL OR v.id IS NOT NULL OR pr.id IS NOT NULL OR cs.id IS NOT NULL OR jnl.id IS NOT NULL OR bud.id IS NOT NULL OR inc.id IS NOT NULL OR exp.id IS NOT NULL OR bill.id IS NOT NULL OR adj.id IS NOT NULL OR trf.id IS NOT NULL OR iss.id IS NOT NULL OR prd.id IS NOT NULL OR so.id IS NOT NULL OR edoc.id IS NOT NULL OR hrchg.id IS NOT NULL OR hrvac.id IS NOT NULL OR hroff.id IS NOT NULL OR hrlv.id IS NOT NULL OR hrot.id IS NOT NULL OR hrapp.id IS NOT NULL OR hrdisc.id IS NOT NULL OR prl.id IS NOT NULL)
           ORDER BY i.created_at`,
       );
       const pending: WorkflowPendingView[] = [];
@@ -1860,6 +1863,7 @@ export class WorkflowsService {
         'AWAITING_PAYMENT',
         'AWAITING_DELIVERY',
         'PARTIALLY_RECEIVED',
+        'AWAITING_COMPLETION',
         'COMPLETED',
       ].includes(request.rows[0]?.status ?? '');
     }
@@ -2057,7 +2061,7 @@ export class WorkflowsService {
     const sql = `
       ${this.instanceSelectSql({ archived: true })}
        WHERE i.id = $1
-         AND (sub.id IS NOT NULL OR v.id IS NOT NULL OR pr.id IS NOT NULL OR cs.id IS NOT NULL OR jnl.id IS NOT NULL OR bud.id IS NOT NULL OR inc.id IS NOT NULL OR exp.id IS NOT NULL OR bill.id IS NOT NULL OR adj.id IS NOT NULL OR trf.id IS NOT NULL OR prd.id IS NOT NULL OR so.id IS NOT NULL OR edoc.id IS NOT NULL OR hrchg.id IS NOT NULL OR hrvac.id IS NOT NULL OR hroff.id IS NOT NULL OR hrlv.id IS NOT NULL OR hrot.id IS NOT NULL OR hrapp.id IS NOT NULL OR hrdisc.id IS NOT NULL OR prl.id IS NOT NULL OR i.subject_type LIKE 'HR_%')
+         AND (sub.id IS NOT NULL OR v.id IS NOT NULL OR pr.id IS NOT NULL OR cs.id IS NOT NULL OR jnl.id IS NOT NULL OR bud.id IS NOT NULL OR inc.id IS NOT NULL OR exp.id IS NOT NULL OR bill.id IS NOT NULL OR adj.id IS NOT NULL OR trf.id IS NOT NULL OR iss.id IS NOT NULL OR prd.id IS NOT NULL OR so.id IS NOT NULL OR edoc.id IS NOT NULL OR hrchg.id IS NOT NULL OR hrvac.id IS NOT NULL OR hroff.id IS NOT NULL OR hrlv.id IS NOT NULL OR hrot.id IS NOT NULL OR hrapp.id IS NOT NULL OR hrdisc.id IS NOT NULL OR prl.id IS NOT NULL OR i.subject_type LIKE 'HR_%')
        ${forUpdate ? 'FOR UPDATE OF i' : ''}`;
     const result = await tx.client.query<InstanceRow>(sql, [id]);
     const row = result.rows[0];
@@ -2532,8 +2536,8 @@ export class WorkflowsService {
       SELECT i.*, d.key AS definition_key, s.key AS current_stage_key,
              ${opts.archived ? 'af.key' : 'NULL::text'} AS archived_from_stage_key, e.code AS entity_code,
              app.user_public_name(i.originator_user_id) AS originator_name,
-             coalesce(sub.title, v.legal_name, pv.title, csv.title, jnl.narration, bud.reference_number, inc.narration, exp.narration, bill.narration, bill.reference_number, adj.reference_number, trf.reference_number, prd.reference_number, so.reference_number, edoc.title, hrvac.title, hremp.first_name || ' ' || hremp.last_name, hrlv.reference_number, hrdisc.reference_number, prl.reference_number, hrot.id::text, hrapp.id::text) AS title,
-             coalesce(sub.reference_number, v.reference_number, pr.reference_number, csr.reference_number, jnl.reference_number, bud.reference_number, inc.reference_number, exp.reference_number, bill.reference_number, adj.reference_number, trf.reference_number, prd.reference_number, so.reference_number, edoc.reference_number, hrvac.reference_number, hremp.reference_number, hrlv.reference_number, hrdisc.reference_number, prl.reference_number, hrot.id::text, hrapp.id::text) AS reference_number,
+             coalesce(sub.title, v.legal_name, pv.title, csv.title, jnl.narration, bud.reference_number, inc.narration, exp.narration, bill.narration, bill.reference_number, adj.reference_number, trf.reference_number, iss.reference_number, prd.reference_number, so.reference_number, edoc.title, hrvac.title, hremp.first_name || ' ' || hremp.last_name, hrlv.reference_number, hrdisc.reference_number, prl.reference_number, hrot.id::text, hrapp.id::text) AS title,
+             coalesce(sub.reference_number, v.reference_number, pr.reference_number, csr.reference_number, jnl.reference_number, bud.reference_number, inc.reference_number, exp.reference_number, bill.reference_number, adj.reference_number, trf.reference_number, iss.reference_number, prd.reference_number, so.reference_number, edoc.reference_number, hrvac.reference_number, hremp.reference_number, hrlv.reference_number, hrdisc.reference_number, prl.reference_number, hrot.id::text, hrapp.id::text) AS reference_number,
              coalesce(pv.urgency, csv.urgency) AS urgency,
              coalesce(pv.total_amount_kobo, csv.total_amount_kobo, prl.net_kobo)::text AS amount_kobo,
              coalesce(pr.id, csr.id) AS linked_request_id,
@@ -2575,6 +2579,8 @@ export class WorkflowsService {
           ON adj.id = i.subject_id AND i.subject_type = 'INVENTORY_ADJUSTMENT'
         LEFT JOIN stock_transfers trf
           ON trf.id = i.subject_id AND i.subject_type = 'INVENTORY_TRANSFER'
+        LEFT JOIN stock_issues iss
+          ON iss.id = i.subject_id AND i.subject_type = 'INVENTORY_ISSUE'
         LEFT JOIN production_orders prd
           ON prd.id = i.subject_id AND i.subject_type = 'PRODUCTION_ORDER'
         LEFT JOIN sales_orders so
@@ -2638,6 +2644,11 @@ export class WorkflowsService {
       if (action === 'APPROVE' && nextStatus === 'COMPLETED') return 'inventory.adjustment.approved';
       if (action === 'REJECT') return 'inventory.adjustment.rejected';
       return 'inventory.adjustment.submitted';
+    }
+    if (instance.subject_type === 'INVENTORY_ISSUE') {
+      if (action === 'APPROVE' && nextStatus === 'COMPLETED') return 'inventory.issue.approved';
+      if (action === 'REJECT') return 'inventory.issue.rejected';
+      return 'inventory.issue.submitted';
     }
     if (instance.subject_type === 'INVENTORY_TRANSFER') {
       if (action === 'APPROVE' && nextStatus === 'COMPLETED') return 'inventory.transfer.approved';
@@ -2900,10 +2911,10 @@ export class WorkflowsService {
         await tx.client.query(
           `INSERT INTO procurement_version_lines (
              version_id, entity_id, line_number, description, category_id, quantity, unit_id,
-             unit_price_kobo, line_amount_kobo, budget_line_id, created_by, updated_by
+             unit_price_kobo, line_amount_kobo, budget_line_id, inventory_item_id, created_by, updated_by
            )
            SELECT $1, entity_id, line_number, description, category_id, quantity, unit_id,
-                  unit_price_kobo, line_amount_kobo, budget_line_id, $2, $2
+                  unit_price_kobo, line_amount_kobo, budget_line_id, inventory_item_id, $2, $2
              FROM procurement_version_lines
             WHERE version_id = $3
             ORDER BY line_number`,
@@ -2925,19 +2936,37 @@ export class WorkflowsService {
             )`,
         [nextId, actorRef, requestId, request.current_version],
       );
-      await tx.client.query(
-        `INSERT INTO procurement_quotations (
-           request_id, version_id, entity_id, document_id, vendor_id, amount_kobo, notes, created_by, updated_by
-         )
-         SELECT request_id, $1, entity_id, document_id, vendor_id, amount_kobo, notes, $2, $2
-           FROM procurement_quotations
-          WHERE request_id = $3
-            AND version_id = (
-              SELECT id FROM procurement_versions
-               WHERE request_id = $3 AND version_number = $4
-            )`,
-        [nextId, actorRef, requestId, request.current_version],
+      const quotes = await tx.client.query<{ id: string }>(
+        `SELECT q.id FROM procurement_quotations q
+           JOIN procurement_versions v ON v.id = q.version_id
+          WHERE q.request_id = $1 AND v.version_number = $2
+          ORDER BY q.created_at`,
+        [requestId, request.current_version],
       );
+      for (const quote of quotes.rows) {
+        const copied = await tx.client.query<{ id: string }>(
+          `INSERT INTO procurement_quotations (
+             request_id, version_id, entity_id, document_id, vendor_id, unit_price_kobo, amount_kobo, notes,
+             created_by, updated_by
+           )
+           SELECT request_id, $1, entity_id, document_id, vendor_id, unit_price_kobo, amount_kobo, notes, $2, $2
+             FROM procurement_quotations
+            WHERE id = $3
+           RETURNING id`,
+          [nextId, actorRef, quote.id],
+        );
+        const copiedId = copied.rows[0]?.id;
+        if (!copiedId) continue;
+        await tx.client.query(
+          `INSERT INTO procurement_quotation_lines (
+             quotation_id, entity_id, line_number, unit_price_kobo, line_amount_kobo, created_by, updated_by
+           )
+           SELECT $1, entity_id, line_number, unit_price_kobo, line_amount_kobo, $2, $2
+             FROM procurement_quotation_lines
+            WHERE quotation_id = $3`,
+          [copiedId, actorRef, quote.id],
+        );
+      }
     }
     await tx.client.query(
       `UPDATE procurement_requests
@@ -3294,17 +3323,21 @@ export class WorkflowsService {
     actor: ActorContext,
     input: { adjustmentId: string },
   ): Promise<WorkflowInstanceView> {
-    const definition = await this.loadDefinition(tx, INVENTORY_ADJUST_WORKFLOW_KEY);
-    const first = definition.stages[0];
-    if (!first) throw new Error('inventory-adjust-v1 has no stages.');
     const row = (
       await tx.client.query<{
         reference_number: string;
         entity_id: string;
         reason: string;
-      }>(`SELECT reference_number, entity_id, reason FROM stock_adjustments WHERE id = $1`, [input.adjustmentId])
+        requires_finance: boolean;
+      }>(`SELECT reference_number, entity_id, reason, requires_finance FROM stock_adjustments WHERE id = $1`, [
+        input.adjustmentId,
+      ])
     ).rows[0];
     if (!row) throw new NotFoundError('That adjustment was not found.');
+    const definitionKey = row.requires_finance ? INVENTORY_ADJUST_FINANCE_WORKFLOW_KEY : INVENTORY_ADJUST_WORKFLOW_KEY;
+    const definition = await this.loadDefinition(tx, definitionKey);
+    const first = definition.stages[0];
+    if (!first) throw new Error(`${definitionKey} has no stages.`);
     const inserted = await tx.client.query<{ id: string }>(
       `INSERT INTO workflow_instances (
          definition_id, subject_type, subject_id, subject_version, entity_id, originator_user_id,
@@ -3340,6 +3373,59 @@ export class WorkflowsService {
       `/inventory/adjustments`,
     );
     return this.loadView(tx, actor, instanceId);
+  }
+
+  async startInventoryIssueInTx(
+    tx: TxScope,
+    actor: ActorContext,
+    input: { issueId: string },
+  ): Promise<string> {
+    const definition = await this.loadDefinition(tx, INVENTORY_ISSUE_WORKFLOW_KEY);
+    const first = definition.stages[0];
+    if (!first) throw new Error('inventory-issue-v1 has no stages.');
+    const row = (
+      await tx.client.query<{
+        reference_number: string;
+        entity_id: string;
+        reason: string;
+      }>(`SELECT reference_number, entity_id, reason FROM stock_issues WHERE id = $1`, [input.issueId])
+    ).rows[0];
+    if (!row) throw new NotFoundError('That issue was not found.');
+    const inserted = await tx.client.query<{ id: string }>(
+      `INSERT INTO workflow_instances (
+         definition_id, subject_type, subject_id, subject_version, entity_id, originator_user_id,
+         current_stage_id, status, created_by, updated_by
+       ) VALUES ($1, 'INVENTORY_ISSUE', $2, 1, $3, $4::uuid, $5, 'IN_PROGRESS', $4, $4)
+       RETURNING id`,
+      [definition.id, input.issueId, row.entity_id, actor.ref, first.id],
+    );
+    const instanceId = inserted.rows[0]?.id;
+    if (!instanceId) throw new Error('The issue workflow was not created.');
+    await this.replaceHolds(tx, {
+      instanceId,
+      subjectType: 'INVENTORY_ISSUE',
+      subjectId: input.issueId,
+      reference: row.reference_number,
+      title: row.reason,
+      entityId: row.entity_id,
+      stage: first,
+      status: 'IN_PROGRESS',
+      originatorUserId: actor.ref,
+      createdBy: actor.ref,
+    });
+    await this.notifyNextApprovers(
+      tx,
+      {
+        subject_type: 'INVENTORY_ISSUE',
+        subject_id: input.issueId,
+        reference_number: row.reference_number,
+        title: row.reason,
+        entity_id: row.entity_id,
+      },
+      first,
+      `/inventory/issues`,
+    );
+    return instanceId;
   }
 
   async startInventoryTransferInTx(
@@ -3639,13 +3725,23 @@ export class WorkflowsService {
     input: { requestId: string; snapshot: unknown; subjectVersion: number },
   ): Promise<void> {
     const entityId = await this.requestEntityId(tx, input.requestId);
+    const frozen = await tx.client.query<{ canonical_json: unknown }>(
+      `SELECT s.canonical_json
+         FROM procurement_memo_snapshots s
+         JOIN procurement_versions v ON v.id = s.version_id
+         JOIN procurement_requests r ON r.id = s.request_id AND v.version_number = r.current_version
+        WHERE s.request_id = $1
+        ORDER BY s.created_at DESC
+        LIMIT 1`,
+      [input.requestId],
+    );
     await this.seals.create(tx, {
       actor,
       entityId,
       subjectType: 'PROCUREMENT',
       subjectId: input.requestId,
       subjectVersion: input.subjectVersion,
-      snapshot: input.snapshot,
+      snapshot: frozen.rows[0]?.canonical_json ?? input.snapshot,
       action: 'verified',
     });
   }
@@ -3746,7 +3842,7 @@ export class WorkflowsService {
         const accepted = await tx.client.query<{ amount: string }>(
           `SELECT coalesce(sum(
                     COALESCE((
-                      SELECT sum(g.quantity_accepted)
+                      SELECT sum(g.quantity_accepted + g.quantity_quarantined)
                         FROM procurement_goods_receipts g
                        WHERE g.request_id = r.id
                          AND coalesce(g.line_id, (
@@ -3917,6 +4013,7 @@ export class WorkflowsService {
     if (subjectType === 'BILL') return `/finance/payables/${subjectId}`;
     if (subjectType === 'INVENTORY_ADJUSTMENT') return `/inventory/adjustments`;
     if (subjectType === 'INVENTORY_TRANSFER') return `/inventory/transfers`;
+    if (subjectType === 'INVENTORY_ISSUE') return `/inventory/issues`;
     if (subjectType === 'PRODUCTION_ORDER') return `/inventory/production/${subjectId}`;
     if (subjectType === 'SALES_ORDER') return `/inventory/sales/${subjectId}`;
     if (subjectType === 'EDMS_DOCUMENT') return `/edms/documents/${subjectId}`;
@@ -4234,6 +4331,21 @@ export class WorkflowsService {
       return;
     }
     if (action === 'REJECT') await this.inventory?.rejectTransferInTx(tx, actor, instance.subject_id);
+  }
+
+  private async applyInventoryIssueOutcome(
+    tx: TxScope,
+    actor: ActorContext,
+    instance: InstanceRow,
+    action: WorkflowAction,
+    nextStatus: string,
+  ): Promise<void> {
+    if (instance.subject_type !== 'INVENTORY_ISSUE') return;
+    if (action === 'APPROVE' && nextStatus === 'COMPLETED') {
+      await this.inventory?.postIssueInTx(tx, actor, instance.subject_id);
+      return;
+    }
+    if (action === 'REJECT') await this.inventory?.rejectIssueInTx(tx, actor, instance.subject_id);
   }
 
   private async applyProductionOutcome(

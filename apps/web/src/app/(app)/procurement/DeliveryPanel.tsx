@@ -25,7 +25,6 @@ export function DeliveryPanel({
   const outstanding = request.outstandingQuantity;
   const closePending = request.closeShort?.status === 'PENDING';
   const closeApproved = request.closeShort?.status === 'APPROVED';
-  const canComplete = (outstanding === 0 || closeApproved) && request.paymentComplete;
   const present = new Set([
     ...request.receipts.flatMap((receipt) => receipt.documents.map((doc) => doc.kind)),
     ...request.deliveries.flatMap((delivery) => delivery.documents.map((doc) => doc.kind)),
@@ -57,10 +56,14 @@ export function DeliveryPanel({
       ) : null}
       {(outstanding === 0 || closeApproved) && !request.paymentComplete ? (
         <p className="text-[13px] text-ink-700">
-          Delivery is done. Record the remaining vendor payment before completing this request.
+          Delivery is done. The remaining vendor payment is still outstanding.
         </p>
       ) : null}
-      {canComplete ? <CompleteForm request={request} /> : null}
+      {(outstanding === 0 || closeApproved) && request.paymentComplete ? (
+        <p className="text-[13px] text-ink-700">
+          Delivered and paid. Awaiting confirmation by the General Manager who raised this request.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -79,7 +82,7 @@ function DeliveryNoteForm({ request }: { request: ProcurementView }) {
   );
 }
 
-type ItemDraft = { received: string; accepted: string };
+type ItemDraft = { received: string; accepted: string; quarantined: string };
 
 /**
  * One delivery: what applies to the whole consignment is entered once, then
@@ -98,7 +101,10 @@ function DeliveryForm({
   const needsWarehouse = open.some((line) => line.stockItem || line.asset);
   const [drafts, setDrafts] = useState<Record<string, ItemDraft>>(() =>
     Object.fromEntries(
-      open.map((line) => [line.id, { received: String(line.outstandingQuantity), accepted: String(line.outstandingQuantity) }]),
+      open.map((line) => [
+        line.id,
+        { received: String(line.outstandingQuantity), accepted: String(line.outstandingQuantity), quarantined: '0' },
+      ]),
     ),
   );
   const [lastOk, setLastOk] = useState(state);
@@ -108,7 +114,7 @@ function DeliveryForm({
   }
   const today = new Date().toISOString().slice(0, 10);
   const update = (lineId: string, patch: Partial<ItemDraft>) =>
-    setDrafts((current) => ({ ...current, [lineId]: { ...(current[lineId] ?? { received: '0', accepted: '0' }), ...patch } }));
+    setDrafts((current) => ({ ...current, [lineId]: { ...(current[lineId] ?? { received: '0', accepted: '0', quarantined: '0' }), ...patch } }));
   const warehouseOptions = warehouses.map((row) => ({
     value: row.id,
     label: `${row.name} (${row.code})`,
@@ -197,11 +203,13 @@ function DeliveryForm({
               </div>
             );
           }
-          const draft = drafts[line.id] ?? { received: '0', accepted: '0' };
+          const draft = drafts[line.id] ?? { received: '0', accepted: '0', quarantined: '0' };
+          const goods = line.stockItem || line.asset;
           const received = Number(draft.received) || 0;
           const accepted = Number(draft.accepted) || 0;
-          const rejected = Math.max(received - accepted, 0);
-          const staysShort = accepted < line.outstandingQuantity;
+          const quarantined = goods ? Number(draft.quarantined) || 0 : 0;
+          const rejected = Math.max(received - accepted - quarantined, 0);
+          const staysShort = accepted + quarantined < line.outstandingQuantity;
           const prefix = `item.${line.id}`;
           return (
             <fieldset key={line.id} className="space-y-2 border border-ink-200 p-3" data-testid={`delivery-item-${line.lineNumber}`}>
@@ -210,12 +218,13 @@ function DeliveryForm({
               </legend>
               <input type="hidden" name="itemLineId" value={line.id} />
               <input type="hidden" name={`${prefix}.quantityRejected`} value={String(rejected)} />
+              {goods ? null : <input type="hidden" name={`${prefix}.quantityQuarantined`} value="0" />}
               <p className="text-[12px] text-ink-600">
                 Ordered {line.quantity} {line.unitCode ?? ''} · accepted so far {line.acceptedQuantity} · outstanding{' '}
                 {line.outstandingQuantity}
                 {line.categoryName ? ` · ${line.categoryName}` : ''}
               </p>
-              <div className="grid gap-2 sm:grid-cols-3">
+              <div className={goods ? 'grid gap-2 sm:grid-cols-4' : 'grid gap-2 sm:grid-cols-3'}>
                 <TextField
                   label="Quantity received"
                   name={`${prefix}.quantityReceived`}
@@ -235,6 +244,18 @@ function DeliveryForm({
                   value={draft.accepted}
                   onChange={(event) => update(line.id, { accepted: event.target.value })}
                 />
+                {goods ? (
+                  <TextField
+                    label="Quantity quarantined"
+                    name={`${prefix}.quantityQuarantined`}
+                    type="number"
+                    min={0}
+                    max={Math.max(Math.min(received, line.outstandingQuantity) - accepted, 0)}
+                    value={draft.quarantined}
+                    onChange={(event) => update(line.id, { quarantined: event.target.value })}
+                    hint="Held for QC until the GM releases it."
+                  />
+                ) : null}
                 <div>
                   <span className="block text-[12px] font-semibold text-ink-900">Quantity rejected</span>
                   <p className="mt-1 h-9 border border-ink-200 bg-ink-50 px-2 py-2 text-[13px] tabular" aria-live="polite">
@@ -242,6 +263,9 @@ function DeliveryForm({
                   </p>
                 </div>
               </div>
+              {quarantined > 0 ? (
+                <TextField label="Quarantine reason" name={`${prefix}.quarantineReason`} required />
+              ) : null}
               {rejected > 0 ? (
                 <TextField label="Rejection reason" name={`${prefix}.rejectReason`} required />
               ) : null}
@@ -336,7 +360,7 @@ export function ShortageOverrideForm({ request }: { request: ProcurementView }) 
   );
 }
 
-function CompleteForm({ request }: { request: ProcurementView }) {
+export function CompleteProcurementForm({ request }: { request: ProcurementView }) {
   const [state, formAction] = useToastAction(completeDeliveryAction);
   return (
     <form action={formAction} className="space-y-2">
@@ -345,7 +369,7 @@ function CompleteForm({ request }: { request: ProcurementView }) {
         <ErrorState title="Could not complete" message={state.message} requestId={state.requestId} />
       ) : null}
       <Button type="submit" variant="primary">
-        Complete procurement
+        Confirm delivery and complete
       </Button>
     </form>
   );

@@ -12,6 +12,7 @@ export const PROCUREMENT_STATUSES = [
   'PAYMENT_PROCESSING',
   'AWAITING_DELIVERY',
   'PARTIALLY_RECEIVED',
+  'AWAITING_COMPLETION',
   'COMPLETED',
   'REJECTED',
   'ARCHIVED',
@@ -75,6 +76,7 @@ export const PROCUREMENT_M9_TILE_STATUSES: readonly ProcurementStatus[] = [
   'AWAITING_PAYMENT',
   'AWAITING_DELIVERY',
   'PARTIALLY_RECEIVED',
+  'AWAITING_COMPLETION',
   'COMPLETED',
   'REJECTED',
   'ARCHIVED',
@@ -92,6 +94,7 @@ export const PROCUREMENT_HOME_TILE_STATUSES: readonly ProcurementStatus[] = [
   'AWAITING_PAYMENT',
   'AWAITING_DELIVERY',
   'PARTIALLY_RECEIVED',
+  'AWAITING_COMPLETION',
   'COMPLETED',
   'REJECTED',
 ];
@@ -135,6 +138,10 @@ export interface ProcurementLineView {
   rejectedQuantity: number;
   outstandingQuantity: number;
   secondBatchDueOn: string | null;
+  /** Stock Register item for stock/asset lines; required before submission. */
+  inventoryItemId: string | null;
+  inventoryItemCode: string | null;
+  inventoryItemName: string | null;
 }
 
 export interface GoodsReceiptView {
@@ -150,6 +157,9 @@ export interface GoodsReceiptView {
   quantityReceived: number;
   quantityAccepted: number;
   quantityRejected: number;
+  /** Received but held for QC; counts as delivered, not yet available stock. */
+  quantityQuarantined: number;
+  quarantineReason: string | null;
   rejectReason: string | null;
   conditionNotes: string | null;
   supersedesId: string | null;
@@ -567,6 +577,7 @@ export const PROCUREMENT_TILE_LABELS: Record<ProcurementStatus, string> = {
   PAYMENT_PROCESSING: 'Payment processing',
   AWAITING_DELIVERY: 'Awaiting delivery',
   PARTIALLY_RECEIVED: 'Partially received',
+  AWAITING_COMPLETION: 'Awaiting completion',
   COMPLETED: 'Completed',
   REJECTED: 'Rejected',
   ARCHIVED: 'Archived',
@@ -584,7 +595,8 @@ export type ProcurementActionKey =
   | 'approve_funding'
   | 'record_transfer'
   | 'pay_vendor'
-  | 'verify_delivery';
+  | 'verify_delivery'
+  | 'complete_procurement';
 
 /**
  * How an actor qualifies for the action beyond holding `permission`:
@@ -637,6 +649,17 @@ function payerAction(route: FundingRoute | null, label: string): ProcurementNext
     permission: 'finance.payment.execute',
     scope: 'SAME_ENTITY',
     anchor: 'payment',
+  };
+}
+
+function completeAction(): ProcurementNextAction {
+  return {
+    key: 'complete_procurement',
+    label: 'Confirm delivery and complete the procurement',
+    responsible: 'General Manager',
+    permission: 'procurement.complete',
+    scope: 'ORIGINATOR',
+    anchor: 'delivery',
   };
 }
 
@@ -751,10 +774,12 @@ export function procurementNextAction(input: ProcurementNextActionInput): Procur
           ? 'Pay the vendor for the verified delivery'
           : 'Pay the vendor',
       );
+    case 'AWAITING_COMPLETION':
+      return completeAction();
     case 'AWAITING_DELIVERY':
     case 'PARTIALLY_RECEIVED':
       if (input.deliveryComplete) {
-        return input.paymentComplete ? null : payerAction(input.fundingRoute, 'Pay the vendor');
+        return input.paymentComplete ? completeAction() : payerAction(input.fundingRoute, 'Pay the vendor');
       }
       return {
         key: 'verify_delivery',

@@ -12,7 +12,8 @@ export type DomainErrorCode =
   | 'UNAUTHENTICATED'
   | 'APPEND_ONLY_VIOLATION'
   | 'RATE_LIMITED'
-  | 'STEP_UP_REQUIRED';
+  | 'STEP_UP_REQUIRED'
+  | 'CONFIGURATION_REQUIRED';
 
 export class DomainError extends Error {
   readonly code: DomainErrorCode;
@@ -88,6 +89,13 @@ export class UnauthenticatedError extends DomainError {
 export class RateLimitedError extends DomainError {
   constructor(message: string) {
     super('RATE_LIMITED', 429, message);
+  }
+}
+
+/** A workflow depends on a setting the client has not yet confirmed. No default is assumed. */
+export class ConfigurationRequiredError extends DomainError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super('CONFIGURATION_REQUIRED', 409, message, details);
   }
 }
 

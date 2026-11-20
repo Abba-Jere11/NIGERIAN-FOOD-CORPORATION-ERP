@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { ActorContext } from '../src/session';
+import type { UnitOfWork } from '../../../apps/api/src/database/unit-of-work';
 import type { DocumentsService } from '../../../apps/api/src/documents/documents.service';
+import { InventoryService } from '../../../apps/api/src/inventory/inventory.service';
 import type { ProcurementService } from '../../../apps/api/src/procurement/procurement.service';
 import type { RequisitionsService } from '../../../apps/api/src/procurement/requisitions.service';
 import type { WorkflowsService } from '../../../apps/api/src/workflows/workflows.service';
@@ -91,16 +93,19 @@ export async function pricePreparedDraft(
   const categoryId = input.categoryId ?? deps.categoryId;
   const fundingId = input.fundingId ?? deps.fundingId;
   const budgetLineId = input.budgetLineId === undefined ? deps.budgetLineId : input.budgetLineId;
-  const lines = input.extraLines ?? [
-    {
-      description: input.title,
-      categoryId,
-      quantity,
-      unitId: deps.unitId,
-      unitPriceKobo,
-      budgetLineId,
-    },
-  ];
+  const lines = (
+    input.extraLines ?? [
+      {
+        description: input.title,
+        categoryId,
+        quantity,
+        unitId: deps.unitId,
+        unitPriceKobo,
+        budgetLineId,
+      },
+    ]
+  ).map((line) => ({ ...line, createStockItem: true }));
+  ensureStockRegister(deps.procurement);
   await deps.procurement.update(deps.officer, proposal.id, {
     rowVersion: proposal.rowVersion,
     title: input.title,
@@ -118,9 +123,15 @@ export async function pricePreparedDraft(
     lines,
   });
   const total = lines.reduce((sum, line) => sum + line.quantity * line.unitPriceKobo, 0);
+  const units = lines.reduce((sum, line) => sum + line.quantity, 0);
   const competitor = deps.vendorId === ALADE_VENDOR_ID ? XYZ_VENDOR_ID : ALADE_VENDOR_ID;
   await attachPricedQuotation(deps, proposal.id, deps.vendorId, total);
-  let current = await attachPricedQuotation(deps, proposal.id, competitor, total + 50_000);
+  let current = await attachPricedQuotation(
+    deps,
+    proposal.id,
+    competitor,
+    total + Math.ceil(50_000 / units) * units,
+  );
   current = await deps.procurement.selectQuotedVendor(deps.officer, proposal.id, {
     rowVersion: current.rowVersion,
     vendorId: deps.vendorId,
@@ -128,6 +139,16 @@ export async function pricePreparedDraft(
   // The invoice is requested at ED Finance; `approveIfAt` attaches it once the MD has approved.
   flowByRequest.set(proposal.id, deps);
   return current;
+}
+
+/**
+ * Stock and asset lines are mapped to Stock Register items before submission. The
+ * API always injects the inventory service; suites that build ProcurementService
+ * by hand without it get one here so those lines can be mapped.
+ */
+function ensureStockRegister(procurement: ProcurementService): void {
+  const target = procurement as unknown as { inventory?: InventoryService; unitOfWork: UnitOfWork };
+  if (!target.inventory) Object.assign(procurement, { inventory: new InventoryService(target.unitOfWork) });
 }
 
 /**
@@ -179,6 +200,11 @@ function quotationLinesForTotal(
   const current = priced.reduce((sum, line) => sum + line.quantity * line.unitPriceKobo, 0);
   if (current === totalKobo && priced.every((line) => line.unitPriceKobo > 0)) {
     return priced.map((line) => ({ lineNumber: line.lineNumber, unitPriceKobo: line.unitPriceKobo }));
+  }
+  const units = priced.reduce((sum, line) => sum + line.quantity, 0);
+  const uplift = (totalKobo - current) / units;
+  if (Number.isInteger(uplift) && priced.every((line) => line.unitPriceKobo + uplift > 0)) {
+    return priced.map((line) => ({ lineNumber: line.lineNumber, unitPriceKobo: line.unitPriceKobo + uplift }));
   }
   if (priced.length === 1) {
     const qty = priced[0]!.quantity;

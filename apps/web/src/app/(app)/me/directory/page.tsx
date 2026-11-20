@@ -21,7 +21,7 @@ export default async function DirectoryPage({
   return (
     <>
       <PageHeader
-        eyebrow="My workspace"
+        eyebrow="Workspace"
         title="Directory"
         description="Work details only. You see colleagues in the subsidiaries your role can reach."
       />
